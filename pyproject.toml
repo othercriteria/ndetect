@@ -43,4 +43,5 @@ dev = [
     "black>=24.0.0",
     "mypy>=1.8.0",
     "ruff>=0.2.0",
+    "types-setuptools>=69.0.0",
 ] 

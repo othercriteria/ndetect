@@ -1,7 +1,7 @@
 from ndetect.cli import parse_args
 
 
-def test_parse_args_default_mode():
+def test_parse_args_default_mode() -> None:
     args = parse_args(["path/to/file"])
     assert args.mode == "interactive"
     assert args.threshold == 0.85
