@@ -21,6 +21,7 @@ classifiers = [
 dependencies = [
     "datasketch>=1.5.0",  # For MinHash implementation
     "rich>=13.0.0",       # For interactive CLI interface
+    "numpy>=1.24.0",      # For MinHash array operations
 ]
 
 [project.scripts]
@@ -35,7 +36,8 @@ target-version = "py312"
 
 [tool.mypy]
 python_version = "3.12"
-strict = true 
+strict = true
+mypy_path = "ndetect/stubs"
 
 [project.optional-dependencies]
 dev = [
@@ -44,4 +46,7 @@ dev = [
     "mypy>=1.8.0",
     "ruff>=0.2.0",
     "types-setuptools>=69.0.0",
+    "datasketch>=1.5.0",
+    "numpy>=1.24.0",
+    "types-numpy>=1.24.0",  # Added for numpy type hints
 ] 

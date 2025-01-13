@@ -7,8 +7,8 @@ def test_textfile_from_path(tmp_path: Path) -> None:
     test_file = tmp_path / "test.txt"
     test_file.write_text("Hello, World!")
     
-    # Create TextFile instance
-    text_file = TextFile.from_path(test_file)
+    # Create TextFile instance without computing MinHash
+    text_file = TextFile.from_path(test_file, compute_minhash=False)
     
     # Check basic properties
     assert text_file.path == test_file

@@ -5,6 +5,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from ndetect.minhash import compute_signature
+
 @dataclass
 class TextFile:
     """Represents a text file with its metadata and signature."""
@@ -16,15 +18,20 @@ class TextFile:
     signature: Optional[bytes] = None
     
     @classmethod
-    def from_path(cls, path: Path) -> "TextFile":
+    def from_path(cls, path: Path, compute_minhash: bool = True) -> "TextFile":
         """Create a TextFile instance from a path."""
         stat = path.stat()
-        return cls(
+        instance = cls(
             path=path,
             size=stat.st_size,
             modified_time=datetime.fromtimestamp(stat.st_mtime),
             created_time=datetime.fromtimestamp(stat.st_ctime),
         )
+        
+        if compute_minhash:
+            instance.signature = compute_signature(path)
+        
+        return instance
     
     @property
     def extension(self) -> str:
