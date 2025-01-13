@@ -1,7 +1,6 @@
 """MinHash implementation for near-duplicate detection."""
 
 from pathlib import Path
-from typing import Optional
 import numpy as np
 from datasketch import MinHash
 
@@ -25,7 +24,7 @@ def create_minhash(content: str, num_perm: int = 128) -> MinHash:
     
     return minhash
 
-def compute_signature(file_path: Path, num_perm: int = 128) -> Optional[bytes]:
+def compute_signature(file_path: Path, num_perm: int = 128) -> bytes | None:
     """
     Compute MinHash signature for a text file.
     
@@ -41,7 +40,7 @@ def compute_signature(file_path: Path, num_perm: int = 128) -> Optional[bytes]:
             content = f.read()
         
         minhash = create_minhash(content, num_perm)
-        return minhash.digest().tobytes()
+        return bytes(minhash.digest().tobytes())
         
     except (IOError, OSError, UnicodeDecodeError):
         return None
@@ -72,4 +71,4 @@ def similarity(sig1: bytes, sig2: bytes, num_perm: int = 128) -> float:
     for h in arr2:
         mh2.update(h.tobytes())
     
-    return mh1.jaccard(mh2) 
+    return float(mh1.jaccard(mh2)) 

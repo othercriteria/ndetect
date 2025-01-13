@@ -37,7 +37,7 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = "ndetect/stubs"
+mypy_path = "typings"
 
 [project.optional-dependencies]
 dev = [
