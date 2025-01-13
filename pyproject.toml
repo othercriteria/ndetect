@@ -48,5 +48,4 @@ dev = [
     "types-setuptools>=69.0.0",
     "datasketch>=1.5.0",
     "numpy>=1.24.0",
-    "types-numpy>=1.24.0",  # Added for numpy type hints
 ] 
