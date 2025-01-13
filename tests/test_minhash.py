@@ -1,5 +1,5 @@
 from pathlib import Path
-from ndetect.minhash import create_minhash, compute_signature, similarity
+from ndetect.minhash import create_minhash, compute_signature, similarity, create_shingles
 
 def test_create_minhash() -> None:
     content1 = "hello world"
@@ -51,3 +51,29 @@ def test_similarity() -> None:
     assert similarity(sig1, sig2) == 1.0
     # Different content should have lower similarity
     assert similarity(sig1, sig3) < 1.0  # Less strict assertion 
+
+def test_create_shingles() -> None:
+    text = "hello world"
+    shingles = create_shingles(text, k=3)
+    expected = {"hel", "ell", "llo", "lo ", "o w", " wo", "wor", "orl", "rld"}
+    assert shingles == expected
+
+def test_create_shingles_normalized() -> None:
+    text1 = "Hello  World"
+    text2 = "hello world"
+    shingles1 = create_shingles(text1, k=3)
+    shingles2 = create_shingles(text2, k=3)
+    assert shingles1 == shingles2
+
+def test_similar_text_higher_similarity() -> None:
+    text1 = "hello world how are you"
+    text2 = "hello world how are they"  # Only last word different
+    
+    mh1 = create_minhash(text1)
+    mh2 = create_minhash(text2)
+    
+    sig1 = mh1.digest().tobytes()
+    sig2 = mh2.digest().tobytes()
+    
+    similarity_score = similarity(sig1, sig2)
+    assert similarity_score > 0.7  # High similarity expected 
