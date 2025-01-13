@@ -30,8 +30,8 @@ def test_is_text_file_with_custom_extensions(tmp_path: Path) -> None:
 
 def test_is_text_file_with_low_printable_ratio(tmp_path: Path) -> None:
     file_path = tmp_path / "test.txt"
-    # Create a string with 50% non-printable characters
-    content = "Hello\x00World\x00!"
+    # Create a string with >50% (but <80%) printable characters
+    content = "Hello\x00\x00World\x00!"
     file_path.write_bytes(content.encode("utf-8"))
     assert not is_text_file(file_path)
     assert is_text_file(file_path, min_printable_ratio=0.5) 

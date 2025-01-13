@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Optional
 
+SAMPLE_SIZE_BYTES = 8 * 1024  # 8KB
 
 def is_text_file(
     file_path: Path,
@@ -27,9 +28,8 @@ def is_text_file(
 
     try:
         # Try reading the first 8KB of the file
-        sample_size = 8 * 1024
         with file_path.open("rb") as f:
-            raw_bytes = f.read(sample_size)
+            raw_bytes = f.read(SAMPLE_SIZE_BYTES)
 
         # Try decoding as UTF-8
         try:
