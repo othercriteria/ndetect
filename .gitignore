@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual Environment
+.env
+.venv
+env/
+venv/
+
+# Testing and Coverage
+.coverage
+.pytest_cache/
+htmlcov/
+
+# Type Checking
+.mypy_cache/
+.dmypy.json
+.pytype/
+
+# IDE
+.idea/
+.vscode/
+
+# Misc
+*.log
+.DS_Store
+
+# Nix
+.direnv/
+flake.lock
