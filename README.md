@@ -138,23 +138,58 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 ---
 
 ### **Minimum Viable Product (MVP) Scope**
-1. **Interactive Mode**:
-   - Display groups of duplicates.
-   - Allow basic actions (keep all, delete, move).
-   - Recalculate groups dynamically after each action.
 
-2. **Non-Interactive Mode**:
-   - Automatically process duplicates with simple retention criteria (e.g., keep the smallest or oldest file).
+#### 1. Project Setup ✅
+- Basic project structure with `pyproject.toml` and dependencies
+- Development environment with Nix
+- CI pipeline with linting, type checking, and tests
+- Logging infrastructure
 
-3. **MinHash Similarity**:
-   - Use MinHash with a default similarity threshold of 0.85.
-   - Support efficient grouping via a similarity graph.
+#### 2. Text-Likeness Detection ✅
+- UTF-8 decoding validation
+- Printable character ratio checking
+- Configurable file extension filtering
+- Unit tests for text detection
 
-4. **Text-Likeness Detection**:
-   - Basic checks for printable character ratio and UTF-8 validity.
+#### 3. CLI Framework ✅
+- Argument parsing for paths and options
+- Mode selection (interactive/non-interactive)
+- Configurable thresholds
+- Basic logging output
 
-5. **Logging**:
-   - Log excluded files and actions taken.
+#### 4. MinHash Implementation 🚧
+- Document fingerprinting
+- Signature generation
+- Similarity calculation
+- Efficient storage of signatures
+
+#### 5. Duplicate Detection 🚧
+- Build similarity graph
+- Group formation using transitive relationships
+- Dynamic group updates
+- Similarity threshold configuration
+
+#### 6. Interactive Mode 🚧
+- Group display interface
+- Action menu implementation
+- File operation handling (delete/move)
+- Progress indication
+
+#### 7. Non-Interactive Mode 🚧
+- Automated processing logic
+- Retention criteria implementation
+- Batch operations
+- Action logging
+
+#### 8. Error Handling 🚧
+- Graceful failure handling
+- User-friendly error messages
+- Recovery mechanisms
+- Operation validation
+
+Legend:
+✅ - Complete
+🚧 - Not Started/In Progress
 
 ---
 
