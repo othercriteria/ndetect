@@ -3,24 +3,54 @@
 from pathlib import Path
 import numpy as np
 from datasketch import MinHash
-from typing import Optional
+from typing import Optional, Iterator, List
+from concurrent.futures import ThreadPoolExecutor
+from itertools import islice
 
-def create_shingles(text: str, k: int = 5) -> set[str]:
-    """
-    Create k-shingles from text content.
-    
-    Args:
-        text: Input text
-        k: Size of each shingle (default: 5)
-        
-    Returns:
-        Set of k-shingles
-    """
-    # Normalize text: lowercase and remove excessive whitespace
+def _chunk_text(text: str, chunk_size: int = 1024 * 1024) -> Iterator[str]:
+    """Split text into chunks for parallel processing."""
+    for i in range(0, len(text), chunk_size):
+        yield text[i:i + chunk_size]
+
+def _process_chunk(args: tuple[str, int]) -> set[str]:
+    """Process a single chunk of text to generate shingles."""
+    chunk, k = args
+    return {chunk[i:i+k] for i in range(len(chunk) - k + 1)}
+
+def create_shingles(text: str, k: int = 5, chunk_size: int = 1024 * 1024) -> set[str]:
+    """Create k-shingles from text content using parallel processing for large files."""
+    # Normalize text
     text = ' '.join(text.lower().split())
     
-    # Generate k-shingles
-    return {text[i:i+k] for i in range(len(text) - k + 1)}
+    # For small files, process directly
+    if len(text) <= chunk_size:
+        return {text[i:i+k] for i in range(len(text) - k + 1)}
+    
+    # For large files, process in parallel
+    chunks = list(_chunk_text(text, chunk_size))
+    shingles: set[str] = set()
+    
+    with ThreadPoolExecutor() as executor:
+        # Process chunks in parallel
+        chunk_results = list(executor.map(
+            _process_chunk,
+            [(chunk, k) for chunk in chunks]
+        ))
+        
+        # Combine results
+        for result in chunk_results:
+            shingles.update(result)
+        
+        # Handle shingles that cross chunk boundaries
+        for i in range(len(chunks) - 1):
+            boundary_text = chunks[i][-k:] + chunks[i+1][:k]
+            boundary_shingles = {
+                boundary_text[j:j+k]
+                for j in range(len(boundary_text) - k + 1)
+            }
+            shingles.update(boundary_shingles)
+    
+    return shingles
 
 def create_minhash(content: str, num_perm: int = 128, shingle_size: int = 5) -> MinHash:
     """

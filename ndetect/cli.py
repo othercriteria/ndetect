@@ -67,6 +67,17 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Enable verbose logging",
     )
+    parser.add_argument(
+        "--max-workers",
+        type=int,
+        help="Maximum number of worker processes for parallel processing",
+    )
+    parser.add_argument(
+        "--chunk-size",
+        type=int,
+        default=1024 * 1024,
+        help="Chunk size in bytes for processing large files (default: 1MB)",
+    )
     
     return parser.parse_args(args)
 
