@@ -1,70 +1,65 @@
 """MinHash implementation for near-duplicate detection."""
 
 from pathlib import Path
+from typing import Optional, Set
 import numpy as np
 from datasketch import MinHash
 
-def create_shingles(text: str, k: int = 5) -> set[str]:
+from ndetect.types import MinHashSignature, SimilarityScore
+
+def create_shingles(text: str, k: int = 5) -> Set[str]:
     """
-    Create k-shingles from text content.
+    Create k-shingles from text.
     
     Args:
         text: Input text
-        k: Size of each shingle (default: 5)
+        k: Size of each shingle
         
     Returns:
         Set of k-shingles
     """
-    # Normalize text: lowercase and remove excessive whitespace
-    text = ' '.join(text.lower().split())
-    
-    # Generate k-shingles
+    # Normalize text: lowercase and collapse whitespace
+    text = " ".join(text.lower().split())
     return {text[i:i+k] for i in range(len(text) - k + 1)}
 
-def create_minhash(content: str, num_perm: int = 128, shingle_size: int = 5) -> MinHash:
+def create_minhash(text: str, num_perm: int = 128, shingle_size: int = 5) -> MinHash:
     """
-    Create a MinHash signature from text content using shingling.
+    Create MinHash signature from text.
     
     Args:
-        content: Text content to hash
-        num_perm: Number of permutations for MinHash (default: 128)
-        shingle_size: Size of shingles to use (default: 5)
+        text: Input text
+        num_perm: Number of permutations to use
+        shingle_size: Size of shingles for text splitting
         
     Returns:
-        MinHash object with the content's signature
+        MinHash object
     """
     minhash = MinHash(num_perm=num_perm)
-    
-    # Generate shingles and add to MinHash
-    shingles = create_shingles(content, k=shingle_size)
-    for shingle in shingles:
+    # Add each shingle to the MinHash
+    for shingle in create_shingles(text, k=shingle_size):
         minhash.update(shingle.encode('utf-8'))
-    
     return minhash
 
-def compute_signature(file_path: Path, num_perm: int = 128, shingle_size: int = 5) -> bytes | None:
+def compute_signature(file_path: Path, num_perm: int = 128, shingle_size: int = 5) -> Optional[MinHash]:
     """
-    Compute MinHash signature for a text file.
+    Compute MinHash signature for a file.
     
     Args:
-        file_path: Path to the text file
-        num_perm: Number of permutations for MinHash
-        shingle_size: Size of shingles to use
+        file_path: Path to the file
+        num_perm: Number of permutations to use
+        shingle_size: Size of shingles for text splitting
         
     Returns:
-        Bytes containing the MinHash signature, or None if file cannot be read
+        MinHash object, or None if file cannot be read
     """
     try:
-        with file_path.open('r', encoding='utf-8') as f:
+        with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
-        minhash = create_minhash(content, num_perm, shingle_size)
-        return bytes(minhash.digest().tobytes())
-        
-    except (IOError, OSError, UnicodeDecodeError):
+        return create_minhash(content, num_perm=num_perm, shingle_size=shingle_size)
+    except (IOError, UnicodeDecodeError):
         return None
 
-def similarity(sig1: bytes, sig2: bytes, num_perm: int = 128) -> float:
+def similarity(sig1: MinHashSignature, sig2: MinHashSignature, num_perm: int = 128) -> SimilarityScore:
     """
     Calculate Jaccard similarity between two MinHash signatures.
     
@@ -76,18 +71,11 @@ def similarity(sig1: bytes, sig2: bytes, num_perm: int = 128) -> float:
     Returns:
         Estimated Jaccard similarity between the two signatures
     """
-    # Create new MinHash objects
-    mh1 = MinHash(num_perm=num_perm)
-    mh2 = MinHash(num_perm=num_perm)
-    
     # Convert bytes back to numpy arrays
     arr1 = np.frombuffer(sig1, dtype=np.uint64)
     arr2 = np.frombuffer(sig2, dtype=np.uint64)
     
-    # Update the MinHash objects with the raw hash values
-    for h in arr1:
-        mh1.update(h.tobytes())
-    for h in arr2:
-        mh2.update(h.tobytes())
-    
-    return float(mh1.jaccard(mh2)) 
+    # Calculate Jaccard similarity directly from the arrays
+    # Jaccard similarity = number of equal elements / total number of elements
+    equal_count = np.sum(arr1 == arr2)
+    return SimilarityScore(float(equal_count) / len(arr1))

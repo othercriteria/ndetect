@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
+from datasketch import MinHash
 
 from ndetect.minhash import compute_signature
 
@@ -15,7 +16,7 @@ class TextFile:
     size: int
     modified_time: datetime
     created_time: datetime
-    signature: Optional[bytes] = None
+    signature: Optional[MinHash] = None
     
     @classmethod
     def from_path(

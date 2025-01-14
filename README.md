@@ -15,27 +15,68 @@
 #### **2. Modes of Operation**
 The tool operates in two primary modes:
 1. **Interactive Mode** (default):
-   - Groups of duplicates are displayed, allowing users to inspect and take actions manually.
+   - Groups of duplicates are displayed in a clear tabular format, showing:
+     - File paths
+     - File sizes (in bytes)
+     - Modification timestamps
+     - Approximate similarity percentage
    - Actions include:
-     - Keeping all files in a group.
-     - Deleting specific duplicates.
-     - Moving duplicates to a designated "holding" directory.
-     - Viewing details of similarity scores for a group.
-   - Groups are recalculated dynamically after each action.
+     - Keeping all files in a group
+     - Deleting specific duplicates
+     - Moving duplicates to a designated directory
+     - Viewing detailed information
+     - Skipping groups
+     - Quitting the program
 2. **Non-Interactive Mode**:
-   - Automatically processes files according to specified criteria without user interaction.
+   - Automatically processes files according to specified criteria without user interaction
    - Supports configurable options for:
-     - Similarity threshold.
-     - Criteria to determine which file to keep (e.g., age, size).
-     - Purgatory location for duplicates.
-     - Logging of actions.
+     - Similarity threshold
+     - Criteria to determine which file to keep (e.g., age, size)
+     - Output directory for duplicates
+     - Logging of actions
 
 #### **3. Text-Likeness Detection**
-- The tool automatically excludes files that are not text-like.
+- The tool automatically excludes files that are not text-like
 - Criteria for exclusion:
-  - Low ratio of printable characters in the file content.
-  - Decoding errors when reading as UTF-8 or other standard encodings.
-  - Optionally, file extension filters (e.g., `.txt`, `.log`, `.csv`).
+  - Low ratio of printable characters in the file content
+  - Decoding errors when reading as UTF-8
+  - File extension filters (defaults to .txt, .md, .log, .csv)
+
+---
+
+### **User Interface**
+
+#### **Interactive Mode**
+1. **Initialization**:
+   - Shows a progress spinner while scanning files
+   - Reports the total number of valid text files found
+
+2. **Group Presentation**:
+   - Each group is displayed in a bordered panel showing:
+     ```
+     ╭── Group N (~XX.XX% similar) ──╮
+     │ File        Size     Modified  │
+     │ path1.txt   252 B   timestamp │
+     │ path2.txt   6.0 KB  timestamp │
+     ╰────────────────────────────────╯
+     ```
+   - For groups with 2 files: Shows "~XX.XX% similar"
+   - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
+
+3. **Available Actions**:
+   - **[k] Keep all**: No changes are made to this group
+   - **[d] Delete duplicates**: Select files to delete
+   - **[m] Move duplicates**: Select files to move
+   - **[i] Show details**: Display similarity details
+   - **[s] Skip group**: Move to next group
+   - **[q] Quit**: Exit the program
+
+4. **File Selection**:
+   - When deleting or moving files:
+     - Files are numbered for selection
+     - Support for selecting multiple files
+     - Options for 'all' or 'none'
+     - Confirmation before actions
 
 ---
 
@@ -88,6 +129,15 @@ The tool operates in two primary modes:
 - Groups duplicates using a **similarity graph**:
   - Nodes represent files.
   - Edges represent pairs of files with similarity above the threshold.
+- Implementation details:
+  - Document fingerprinting using k-shingles:
+    - Text is normalized (lowercase, whitespace normalized)
+    - Content is split into overlapping k-shingles (default k=5)
+    - Each shingle is hashed and added to MinHash signature
+  - Similarity calculation:
+    - Jaccard similarity between MinHash signatures
+    - Configurable number of permutations (default: 128)
+    - Configurable shingle size for different use cases
 
 #### **2. Text-Likeness Detection**
 - Files that fail basic text-likeness checks are excluded from processing.
@@ -112,16 +162,6 @@ The tool operates in two primary modes:
 #### **6. Logging**
 - Logs all actions taken, including files excluded from processing and duplicates detected.
 - Log format: human-readable text or structured formats like JSON.
-
-#### **4. MinHash Implementation** 🚧
-- Document fingerprinting using k-shingles:
-  - Text is normalized (lowercase, whitespace normalized)
-  - Content is split into overlapping k-shingles (default k=5)
-  - Each shingle is hashed and added to MinHash signature
-- Similarity calculation:
-  - Jaccard similarity between MinHash signatures
-  - Configurable number of permutations (default: 128)
-  - Configurable shingle size for different use cases
 
 ---
 
@@ -177,29 +217,51 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
   - Configurable number of permutations (default: 128)
   - Configurable shingle size for different use cases
 
-#### 5. Duplicate Detection 🚧
+#### 5. Duplicate Detection
+##### Completed ✅
 - Build similarity graph
-- Group formation using transitive relationships
-- Dynamic group updates
 - Similarity threshold configuration
+- Basic group formation
 
-#### 6. Interactive Mode 🚧
-- Group display interface
-- Action menu implementation
-- File operation handling (delete/move)
-- Progress indication
+##### In Progress 🚧
+- Enhanced group formation using transitive relationships
+- Dynamic group updates during operations
+- Group similarity score calculations
+- Memory-efficient processing for large file sets
+
+#### 6. Interactive Mode
+##### Completed ✅
+- Basic group display interface
+- Initial action menu structure
+
+##### In Progress 🚧
+- File deletion implementation
+- Move to holding directory implementation
+- Enhanced group display with file details
+- Progress indication for long operations
+- Detailed file information view
+- Keyboard shortcuts and navigation
+- Safe file operation handling
 
 #### 7. Non-Interactive Mode 🚧
 - Automated processing logic
 - Retention criteria implementation
 - Batch operations
 - Action logging
+- Report generation
+- Dry-run mode
 
-#### 8. Error Handling 🚧
-- Graceful failure handling
+#### 8. Error Handling
+##### Completed ✅
+- Basic validation for file operations
+- Type checking and validation
+- Standard error messages
+
+##### In Progress 🚧
+- Enhanced error recovery mechanisms
 - User-friendly error messages
-- Recovery mechanisms
-- Operation validation
+- Operation rollback capabilities
+- Detailed error logging
 
 Legend:
 ✅ - Complete

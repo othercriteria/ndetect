@@ -22,6 +22,7 @@ dependencies = [
     "datasketch>=1.5.0",  # For MinHash implementation
     "rich>=13.0.0",       # For interactive CLI interface
     "numpy>=1.24.0",      # For MinHash array operations
+    "networkx>=3.2.0",
 ]
 
 [project.scripts]
@@ -48,4 +49,5 @@ dev = [
     "types-setuptools>=69.0.0",
     "datasketch>=1.5.0",
     "numpy>=1.24.0",
+    "types-networkx>=3.2.0",
 ] 

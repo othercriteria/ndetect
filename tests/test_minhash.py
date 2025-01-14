@@ -1,5 +1,6 @@
 from pathlib import Path
 from ndetect.minhash import create_minhash, compute_signature, similarity, create_shingles
+from ndetect.types import MinHashSignature
 
 def test_create_minhash() -> None:
     content1 = "hello world"
@@ -28,29 +29,31 @@ def test_compute_signature(tmp_path: Path) -> None:
     
     assert sig1 is not None
     assert sig2 is not None
-    assert sig1 == sig2  # Now comparing bytes objects
+    # Compare MinHash objects directly since compute_signature now returns MinHash
+    assert (sig1.digest() == sig2.digest()).all()
 
 def test_compute_signature_invalid_file(tmp_path: Path) -> None:
     file_path = tmp_path / "nonexistent.txt"
     assert compute_signature(file_path) is None
 
 def test_similarity() -> None:
-    content1 = "hello world"
-    content2 = "hello world"
-    content3 = "completely different text"
+    content1 = "hello world this is a test message with some length to it"
+    content2 = "hello world this is a test message with some length to it"  # identical
+    content3 = "the quick brown fox jumps over the lazy dog"  # completely different
     
-    mh1 = create_minhash(content1)
-    mh2 = create_minhash(content2)
-    mh3 = create_minhash(content3)
+    # Use larger shingle size to be more sensitive to differences
+    mh1 = create_minhash(content1, shingle_size=7)
+    mh2 = create_minhash(content2, shingle_size=7)
+    mh3 = create_minhash(content3, shingle_size=7)
     
-    sig1 = mh1.digest().tobytes()
-    sig2 = mh2.digest().tobytes()
-    sig3 = mh3.digest().tobytes()
+    sig1 = MinHashSignature(mh1.digest().tobytes())
+    sig2 = MinHashSignature(mh2.digest().tobytes())
+    sig3 = MinHashSignature(mh3.digest().tobytes())
     
     # Same content should have similarity 1.0
     assert similarity(sig1, sig2) == 1.0
     # Different content should have lower similarity
-    assert similarity(sig1, sig3) < 1.0  # Less strict assertion 
+    assert similarity(sig1, sig3) < 0.5  # More strict threshold
 
 def test_create_shingles() -> None:
     text = "hello world"
@@ -72,8 +75,8 @@ def test_similar_text_higher_similarity() -> None:
     mh1 = create_minhash(text1)
     mh2 = create_minhash(text2)
     
-    sig1 = mh1.digest().tobytes()
-    sig2 = mh2.digest().tobytes()
+    sig1 = MinHashSignature(mh1.digest().tobytes())
+    sig2 = MinHashSignature(mh2.digest().tobytes())
     
     similarity_score = similarity(sig1, sig2)
     assert similarity_score > 0.4  # Moderate similarity expected 
