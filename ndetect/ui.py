@@ -20,7 +20,6 @@ class InteractiveUI:
             console=self.console,
         ) as progress:
             progress.add_task("Scanning files...", total=None)
-            # Actual scanning happens in the caller
             
     def display_group(self, group_id: int, files: List[Path], similarity: float) -> None:
         """Display a group of similar files."""
@@ -36,10 +35,15 @@ class InteractiveUI:
                 f"{stats.st_size:,} bytes",
                 f"{stats.st_mtime:.0f}"
             )
+        
+        similarity_desc = (
+            f"~{similarity:.2%} similar" if len(files) == 2
+            else f"~{similarity:.2%} avg. similarity"
+        )
             
         self.console.print(Panel(
             table,
-            title=f"[bold blue]Group {group_id} (Similarity: {similarity:.2%})",
+            title=f"[bold blue]Group {group_id} ({similarity_desc})",
             border_style="blue"
         ))
         
