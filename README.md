@@ -167,7 +167,7 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 - Configurable thresholds
 - Basic logging output
 
-#### 4. MinHash Implementation 🚧
+#### 4. MinHash Implementation ✅
 - Document fingerprinting using k-shingles:
   - Text is normalized (lowercase, whitespace normalized)
   - Content is split into overlapping k-shingles (default k=5)
