@@ -15,27 +15,68 @@
 #### **2. Modes of Operation**
 The tool operates in two primary modes:
 1. **Interactive Mode** (default):
-   - Groups of duplicates are displayed, allowing users to inspect and take actions manually.
+   - Groups of duplicates are displayed in a clear tabular format, showing:
+     - File paths
+     - File sizes (in bytes)
+     - Modification timestamps
+     - Approximate similarity percentage
    - Actions include:
-     - Keeping all files in a group.
-     - Deleting specific duplicates.
-     - Moving duplicates to a designated "holding" directory.
-     - Viewing details of similarity scores for a group.
-   - Groups are recalculated dynamically after each action.
+     - Keeping all files in a group
+     - Deleting specific duplicates
+     - Moving duplicates to a designated directory
+     - Viewing detailed information
+     - Skipping groups
+     - Quitting the program
 2. **Non-Interactive Mode**:
-   - Automatically processes files according to specified criteria without user interaction.
+   - Automatically processes files according to specified criteria without user interaction
    - Supports configurable options for:
-     - Similarity threshold.
-     - Criteria to determine which file to keep (e.g., age, size).
-     - Purgatory location for duplicates.
-     - Logging of actions.
+     - Similarity threshold
+     - Criteria to determine which file to keep (e.g., age, size)
+     - Output directory for duplicates
+     - Logging of actions
 
 #### **3. Text-Likeness Detection**
-- The tool automatically excludes files that are not text-like.
+- The tool automatically excludes files that are not text-like
 - Criteria for exclusion:
-  - Low ratio of printable characters in the file content.
-  - Decoding errors when reading as UTF-8 or other standard encodings.
-  - Optionally, file extension filters (e.g., `.txt`, `.log`, `.csv`).
+  - Low ratio of printable characters in the file content
+  - Decoding errors when reading as UTF-8
+  - File extension filters (defaults to .txt, .md, .log, .csv)
+
+---
+
+### **User Interface**
+
+#### **Interactive Mode**
+1. **Initialization**:
+   - Shows a progress spinner while scanning files
+   - Reports the total number of valid text files found
+
+2. **Group Presentation**:
+   - Each group is displayed in a bordered panel showing:
+     ```
+     ╭── Group N (~XX.XX% similar) ──╮
+     │ File        Size     Modified  │
+     │ path1.txt   252 B   timestamp │
+     │ path2.txt   6.0 KB  timestamp │
+     ╰────────────────────────────────╯
+     ```
+   - For groups with 2 files: Shows "~XX.XX% similar"
+   - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
+
+3. **Available Actions**:
+   - **[k] Keep all**: No changes are made to this group
+   - **[d] Delete duplicates**: Select files to delete
+   - **[m] Move duplicates**: Select files to move
+   - **[i] Show details**: Display similarity details
+   - **[s] Skip group**: Move to next group
+   - **[q] Quit**: Exit the program
+
+4. **File Selection**:
+   - When deleting or moving files:
+     - Files are numbered for selection
+     - Support for selecting multiple files
+     - Options for 'all' or 'none'
+     - Confirmation before actions
 
 ---
 
