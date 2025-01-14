@@ -70,7 +70,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--max-workers",
         type=int,
-        help="Maximum number of worker processes for parallel processing",
+        help="Maximum number of worker processes (default: number of CPU cores)",
     )
     parser.add_argument(
         "--chunk-size",

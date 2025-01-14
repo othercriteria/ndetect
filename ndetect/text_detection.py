@@ -1,6 +1,7 @@
 """Text file detection and scanning functionality."""
 
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from multiprocessing import cpu_count
 from pathlib import Path
 from typing import List, Optional, Set, Iterator
 import logging
@@ -42,11 +43,15 @@ def scan_paths(
         num_perm: Number of permutations for MinHash
         shingle_size: Size of shingles to use
         allowed_extensions: Set of allowed file extensions
-        max_workers: Maximum number of worker processes (None = CPU count)
+        max_workers: Maximum number of worker processes (defaults to CPU count)
         
     Returns:
         List of TextFile instances for valid text files
     """
+    # Default to using all CPU cores
+    if max_workers is None:
+        max_workers = cpu_count()
+    
     config = FileAnalyzerConfig(
         min_printable_ratio=min_printable_ratio,
         num_perm=num_perm,
