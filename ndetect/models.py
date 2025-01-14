@@ -18,7 +18,13 @@ class TextFile:
     signature: Optional[bytes] = None
     
     @classmethod
-    def from_path(cls, path: Path, compute_minhash: bool = True) -> "TextFile":
+    def from_path(
+        cls,
+        path: Path,
+        compute_minhash: bool = True,
+        num_perm: int = 128,
+        shingle_size: int = 5
+    ) -> "TextFile":
         """Create a TextFile instance from a path."""
         stat = path.stat()
         instance = cls(
@@ -29,7 +35,11 @@ class TextFile:
         )
         
         if compute_minhash:
-            instance.signature = compute_signature(path)
+            instance.signature = compute_signature(
+                path,
+                num_perm=num_perm,
+                shingle_size=shingle_size
+            )
         
         return instance
     

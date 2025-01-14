@@ -54,3 +54,33 @@ def test_scan_paths_with_mixed_files(tmp_path: Path) -> None:
     assert len(text_files) == 2
     paths = {tf.path for tf in text_files}
     assert paths == {text_file, subtext_file} 
+
+
+def test_parse_args_minhash_config() -> None:
+    args = parse_args(["path/to/file", "--num-perm", "256", "--shingle-size", "3"])
+    assert args.num_perm == 256
+    assert args.shingle_size == 3
+
+
+def test_parse_args_default_minhash_config() -> None:
+    args = parse_args(["path/to/file"])
+    assert args.num_perm == 128
+    assert args.shingle_size == 5
+
+
+def test_scan_paths_with_minhash_config(tmp_path: Path) -> None:
+    # Create a test text file
+    test_file = tmp_path / "test.txt"
+    test_file.write_text("Hello, World!")
+    
+    # Scan with custom MinHash config
+    text_files = scan_paths(
+        [str(tmp_path)],
+        min_printable_ratio=0.8,
+        num_perm=256,
+        shingle_size=3
+    )
+    
+    assert len(text_files) == 1
+    assert text_files[0].path == test_file
+    assert text_files[0].has_signature() 
