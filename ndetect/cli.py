@@ -1,15 +1,20 @@
+"""Command-line interface for ndetect."""
+
 import argparse
 import logging
 import sys
-from typing import List, Optional
 from pathlib import Path
+from typing import List, Optional
 
-from ndetect.text_detection import is_text_file
 from ndetect.logging import setup_logging
+from ndetect.text_detection import scan_paths
 
-logger = logging.getLogger("ndetect")
+__all__ = ["parse_args", "scan_paths"]
+
+logger = logging.getLogger(__name__)
 
 def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Detect and manage near-duplicate text files using MinHash"
     )
@@ -37,6 +42,18 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Minimum ratio of printable characters for text detection (default: 0.8)",
     )
     parser.add_argument(
+        "--num-perm",
+        type=int,
+        default=128,
+        help="Number of permutations for MinHash (default: 128)",
+    )
+    parser.add_argument(
+        "--shingle-size",
+        type=int,
+        default=5,
+        help="Size of shingles for text comparison (default: 5)",
+    )
+    parser.add_argument(
         "--log-file",
         type=Path,
         help="Path to log file (if not specified, only log to console)",
@@ -50,6 +67,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     return parser.parse_args(args)
 
 def main(args: Optional[List[str]] = None) -> int:
+    """Main entry point for the CLI."""
     parsed_args = parse_args(args)
     
     # Setup logging
@@ -58,20 +76,24 @@ def main(args: Optional[List[str]] = None) -> int:
     logger.info("Starting ndetect in %s mode", parsed_args.mode)
     logger.info("Scanning paths: %s", parsed_args.paths)
     logger.debug("Using similarity threshold: %f", parsed_args.threshold)
+    logger.debug("MinHash config: num_perm=%d, shingle_size=%d", 
+                parsed_args.num_perm, parsed_args.shingle_size)
     
-    for path in parsed_args.paths:
-        path_obj = Path(path)
-        if path_obj.is_dir():
-            logger.info("Scanning directory: %s", path)
-            for file in path_obj.rglob("*"):
-                if not file.is_file():
-                    continue
-                if not is_text_file(file, min_printable_ratio=parsed_args.min_printable_ratio):
-                    logger.debug("Skipping file: %s (not a text file)", file)
-                    continue
-                # Process text file here
-        else:
-            logger.info("Scanning file: %s", path)
+    # Scan paths and collect text files
+    text_files = scan_paths(
+        parsed_args.paths,
+        min_printable_ratio=parsed_args.min_printable_ratio,
+        num_perm=parsed_args.num_perm,
+        shingle_size=parsed_args.shingle_size
+    )
+    
+    if not text_files:
+        logger.warning("No text files found in the specified paths")
+        return 1
+    
+    logger.info("Found %d text files", len(text_files))
+    
+    # TODO: Implement MinHash signature generation and similarity detection
     
     return 0
 

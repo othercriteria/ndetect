@@ -113,6 +113,16 @@ The tool operates in two primary modes:
 - Logs all actions taken, including files excluded from processing and duplicates detected.
 - Log format: human-readable text or structured formats like JSON.
 
+#### **4. MinHash Implementation** 🚧
+- Document fingerprinting using k-shingles:
+  - Text is normalized (lowercase, whitespace normalized)
+  - Content is split into overlapping k-shingles (default k=5)
+  - Each shingle is hashed and added to MinHash signature
+- Similarity calculation:
+  - Jaccard similarity between MinHash signatures
+  - Configurable number of permutations (default: 128)
+  - Configurable shingle size for different use cases
+
 ---
 
 ### **Command-Line Interface**
@@ -157,11 +167,15 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 - Configurable thresholds
 - Basic logging output
 
-#### 4. MinHash Implementation 🚧
-- Document fingerprinting
-- Signature generation
-- Similarity calculation
-- Efficient storage of signatures
+#### 4. MinHash Implementation ✅
+- Document fingerprinting using k-shingles:
+  - Text is normalized (lowercase, whitespace normalized)
+  - Content is split into overlapping k-shingles (default k=5)
+  - Each shingle is hashed and added to MinHash signature
+- Similarity calculation:
+  - Jaccard similarity between MinHash signatures
+  - Configurable number of permutations (default: 128)
+  - Configurable shingle size for different use cases
 
 #### 5. Duplicate Detection 🚧
 - Build similarity graph

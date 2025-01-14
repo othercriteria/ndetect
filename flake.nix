@@ -49,7 +49,7 @@
             source .venv/bin/activate
             
             # Install package in development mode
-            pip install -e .
+            pip install -e ".[dev]"
             
             # Set PYTHONPATH
             export PYTHONPATH=$PYTHONPATH:$(pwd)
