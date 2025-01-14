@@ -19,7 +19,7 @@ class DuplicateGroup:
 class SimilarityGraph:
     """Graph representation of file similarities."""
     
-    def __init__(self, threshold: float = 0.85):
+    def __init__(self, threshold: float = 0.85) -> None:
         self.threshold = threshold
         self.graph: nx.Graph[Path] = nx.Graph()
         

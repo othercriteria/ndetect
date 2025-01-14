@@ -217,29 +217,51 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
   - Configurable number of permutations (default: 128)
   - Configurable shingle size for different use cases
 
-#### 5. Duplicate Detection 🚧
+#### 5. Duplicate Detection
+##### Completed ✅
 - Build similarity graph
-- Group formation using transitive relationships
-- Dynamic group updates
 - Similarity threshold configuration
+- Basic group formation
 
-#### 6. Interactive Mode 🚧
-- Group display interface
-- Action menu implementation
-- File operation handling (delete/move)
-- Progress indication
+##### In Progress 🚧
+- Enhanced group formation using transitive relationships
+- Dynamic group updates during operations
+- Group similarity score calculations
+- Memory-efficient processing for large file sets
+
+#### 6. Interactive Mode
+##### Completed ✅
+- Basic group display interface
+- Initial action menu structure
+
+##### In Progress 🚧
+- File deletion implementation
+- Move to holding directory implementation
+- Enhanced group display with file details
+- Progress indication for long operations
+- Detailed file information view
+- Keyboard shortcuts and navigation
+- Safe file operation handling
 
 #### 7. Non-Interactive Mode 🚧
 - Automated processing logic
 - Retention criteria implementation
 - Batch operations
 - Action logging
+- Report generation
+- Dry-run mode
 
-#### 8. Error Handling 🚧
-- Graceful failure handling
+#### 8. Error Handling
+##### Completed ✅
+- Basic validation for file operations
+- Type checking and validation
+- Standard error messages
+
+##### In Progress 🚧
+- Enhanced error recovery mechanisms
 - User-friendly error messages
-- Recovery mechanisms
-- Operation validation
+- Operation rollback capabilities
+- Detailed error logging
 
 Legend:
 ✅ - Complete

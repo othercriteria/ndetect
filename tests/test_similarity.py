@@ -72,13 +72,15 @@ def test_similarity_graph_remove_files(tmp_path: Path) -> None:
     file3 = create_test_file(tmp_path, "test3.txt", "hello world")
     
     graph.add_files([file1, file2, file3])
-    assert len(graph.get_groups()) == 1
-    assert len(graph.get_groups()[0].files) == 3
+    initial_groups = graph.get_groups()
+    assert len(initial_groups) == 1
+    assert len(initial_groups[0].files) == 3
     
-    # Remove one file
     graph.remove_files([file1.path])
-    assert len(graph.get_groups()) == 1
-    assert len(graph.get_groups()[0].files) == 2
+    updated_groups = graph.get_groups()
+    assert len(updated_groups) == 1
+    assert len(updated_groups[0].files) == 2
+    assert file1.path not in updated_groups[0].files
 
 def test_similarity_graph_remove_nonexistent_file(tmp_path: Path) -> None:
     graph = SimilarityGraph(threshold=0.8)
