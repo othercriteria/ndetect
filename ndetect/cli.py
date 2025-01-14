@@ -4,10 +4,14 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
+from rich.console import Console
 
 from ndetect.logging import setup_logging
 from ndetect.text_detection import scan_paths
+from ndetect.ui import InteractiveUI
+from ndetect.similarity import SimilarityGraph
+from ndetect.models import TextFile
 
 __all__ = ["parse_args", "scan_paths"]
 
@@ -66,36 +70,86 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     
     return parser.parse_args(args)
 
-def main(args: Optional[List[str]] = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI."""
-    parsed_args = parse_args(args)
+    args = parse_args(argv if argv is not None else None)
+    setup_logging(args.log_file, args.verbose)
     
-    # Setup logging
-    setup_logging(parsed_args.log_file, parsed_args.verbose)
+    ui = InteractiveUI()
+    console = Console()  # For system/error messages
     
-    logger.info("Starting ndetect in %s mode", parsed_args.mode)
-    logger.info("Scanning paths: %s", parsed_args.paths)
-    logger.debug("Using similarity threshold: %f", parsed_args.threshold)
-    logger.debug("MinHash config: num_perm=%d, shingle_size=%d", 
-                parsed_args.num_perm, parsed_args.shingle_size)
-    
-    # Scan paths and collect text files
-    text_files = scan_paths(
-        parsed_args.paths,
-        min_printable_ratio=parsed_args.min_printable_ratio,
-        num_perm=parsed_args.num_perm,
-        shingle_size=parsed_args.shingle_size
-    )
-    
-    if not text_files:
-        logger.warning("No text files found in the specified paths")
+    try:
+        # Show scanning progress
+        ui.show_scan_progress(args.paths)
+        text_files = scan_paths(
+            args.paths,
+            min_printable_ratio=args.min_printable_ratio,
+            num_perm=args.num_perm,
+            shingle_size=args.shingle_size,
+        )
+        
+        if not text_files:
+            console.print("[yellow]No text files found in the specified paths.[/yellow]")
+            return 0
+            
+        console.print(f"\nFound [green]{len(text_files)}[/green] text files.")
+        
+        if args.mode == "interactive":
+            return handle_interactive_mode(ui, text_files, args.threshold)
+        else:
+            return handle_non_interactive_mode(console, text_files, args.threshold)
+            
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
+        return 130
+    except Exception as e:
+        console.print(f"[red]Error: {str(e)}[/red]")
+        if args.verbose:
+            console.print_exception()
         return 1
+
+def handle_interactive_mode(ui: InteractiveUI, text_files: List[TextFile], threshold: float) -> int:
+    """Handle interactive mode with rich UI."""
+    # Build similarity graph
+    graph = SimilarityGraph(threshold=threshold)
+    graph.add_files(text_files)
     
-    logger.info("Found %d text files", len(text_files))
-    
-    # TODO: Implement MinHash signature generation and similarity detection
+    while True:
+        groups = graph.get_groups()
+        if not groups:
+            ui.show_success("No more duplicate groups found.")
+            return 0
+            
+        for group in groups:
+            ui.display_group(group.id, group.files, group.similarity)
+            action = ui.prompt_action()
+            
+            if action == "q":
+                return 0
+            elif action == "s":
+                continue
+            elif action == "k":
+                continue  # Skip to next group
+            elif action == "d":
+                files = ui.select_files(group.files, "Select files to delete")
+                if files and ui.confirm_action("delete", files):
+                    for file in files:
+                        file.unlink()
+                    graph.remove_files(files)
+            elif action == "m":
+                # TODO: Implement move to holding directory
+                ui.show_error("Move to holding not yet implemented")
+            elif action == "i":
+                # TODO: Show detailed file information
+                ui.show_error("Detailed info not yet implemented")
     
     return 0
+
+def handle_non_interactive_mode(console: Console, text_files: List['TextFile'], threshold: float) -> int:
+    """Handle non-interactive mode with basic output."""
+    # TODO: Implement non-interactive mode
+    console.print("[yellow]Non-interactive mode not yet implemented[/yellow]")
+    return 1
 
 if __name__ == "__main__":
     sys.exit(main()) 

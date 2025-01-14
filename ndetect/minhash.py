@@ -3,6 +3,7 @@
 from pathlib import Path
 import numpy as np
 from datasketch import MinHash
+from typing import Optional
 
 def create_shingles(text: str, k: int = 5) -> set[str]:
     """
@@ -42,26 +43,37 @@ def create_minhash(content: str, num_perm: int = 128, shingle_size: int = 5) -> 
     
     return minhash
 
-def compute_signature(file_path: Path, num_perm: int = 128, shingle_size: int = 5) -> bytes | None:
+def compute_signature(path: Path, num_perm: int = 128, shingle_size: int = 5) -> Optional[MinHash]:
     """
     Compute MinHash signature for a text file.
     
     Args:
-        file_path: Path to the text file
+        path: Path to the text file
         num_perm: Number of permutations for MinHash
         shingle_size: Size of shingles to use
         
     Returns:
-        Bytes containing the MinHash signature, or None if file cannot be read
+        MinHash object representing the file's signature, or None if file cannot be read
     """
     try:
-        with file_path.open('r', encoding='utf-8') as f:
+        minhash = MinHash(num_perm=num_perm)
+        
+        with path.open('r', encoding='utf-8') as f:
             content = f.read()
+            
+        # Generate k-shingles
+        shingles = {
+            content[i:i + shingle_size]
+            for i in range(len(content) - shingle_size + 1)
+        }
         
-        minhash = create_minhash(content, num_perm, shingle_size)
-        return bytes(minhash.digest().tobytes())
+        # Update MinHash with shingles
+        for shingle in shingles:
+            minhash.update(shingle.encode('utf-8'))
+            
+        return minhash
         
-    except (IOError, OSError, UnicodeDecodeError):
+    except (IOError, OSError):
         return None
 
 def similarity(sig1: bytes, sig2: bytes, num_perm: int = 128) -> float:
