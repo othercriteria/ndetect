@@ -88,6 +88,15 @@ The tool operates in two primary modes:
 - Groups duplicates using a **similarity graph**:
   - Nodes represent files.
   - Edges represent pairs of files with similarity above the threshold.
+- Implementation details:
+  - Document fingerprinting using k-shingles:
+    - Text is normalized (lowercase, whitespace normalized)
+    - Content is split into overlapping k-shingles (default k=5)
+    - Each shingle is hashed and added to MinHash signature
+  - Similarity calculation:
+    - Jaccard similarity between MinHash signatures
+    - Configurable number of permutations (default: 128)
+    - Configurable shingle size for different use cases
 
 #### **2. Text-Likeness Detection**
 - Files that fail basic text-likeness checks are excluded from processing.
@@ -112,16 +121,6 @@ The tool operates in two primary modes:
 #### **6. Logging**
 - Logs all actions taken, including files excluded from processing and duplicates detected.
 - Log format: human-readable text or structured formats like JSON.
-
-#### **4. MinHash Implementation** 🚧
-- Document fingerprinting using k-shingles:
-  - Text is normalized (lowercase, whitespace normalized)
-  - Content is split into overlapping k-shingles (default k=5)
-  - Each shingle is hashed and added to MinHash signature
-- Similarity calculation:
-  - Jaccard similarity between MinHash signatures
-  - Configurable number of permutations (default: 128)
-  - Configurable shingle size for different use cases
 
 ---
 
