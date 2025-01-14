@@ -6,13 +6,15 @@ import networkx as nx
 from dataclasses import dataclass
 
 from ndetect.models import TextFile
+from ndetect.types import MinHashSignature, SimilarityScore
+from ndetect.minhash import similarity
 
 @dataclass
 class DuplicateGroup:
     """A group of similar files."""
     id: int
     files: List[Path]
-    similarity: float  # Average similarity within group
+    similarity: SimilarityScore  # Average similarity within group
 
 class SimilarityGraph:
     """Graph representation of file similarities."""
@@ -23,8 +25,15 @@ class SimilarityGraph:
         
     def add_files(self, files: List[TextFile]) -> None:
         """Add files to the graph, creating edges for similar pairs."""
+        if not files:
+            return
+            
         # Add all files as nodes
         for file in files:
+            if not isinstance(file, TextFile):
+                raise TypeError(f"Expected TextFile object, got {type(file)}")
+            if file.signature is None:
+                continue
             self.graph.add_node(file.path)
         
         # Add edges between similar files
@@ -32,9 +41,12 @@ class SimilarityGraph:
             for file2 in files[i + 1:]:
                 if file1.signature is None or file2.signature is None:
                     continue
-                similarity = file1.signature.jaccard(file2.signature)
-                if similarity >= self.threshold:
-                    self.graph.add_edge(file1.path, file2.path, weight=similarity)
+                sim_score = similarity(
+                    MinHashSignature(file1.signature.digest().tobytes()),
+                    MinHashSignature(file2.signature.digest().tobytes())
+                )
+                if sim_score >= self.threshold:
+                    self.graph.add_edge(file1.path, file2.path, weight=sim_score)
     
     def get_groups(self) -> List[DuplicateGroup]:
         """Get groups of similar files using connected components."""
@@ -57,4 +69,9 @@ class SimilarityGraph:
     
     def remove_files(self, files: List[Path]) -> None:
         """Remove files from the graph."""
-        self.graph.remove_nodes_from(files) 
+        if not files:
+            return
+            
+        # Remove only existing nodes
+        existing_files = [f for f in files if f in self.graph]
+        self.graph.remove_nodes_from(existing_files) 
