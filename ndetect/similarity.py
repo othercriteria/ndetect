@@ -1,6 +1,6 @@
 """Similarity graph implementation for near-duplicate detection."""
 
-from typing import Dict, List, Set, Any
+from typing import List
 from pathlib import Path
 import networkx as nx
 from dataclasses import dataclass

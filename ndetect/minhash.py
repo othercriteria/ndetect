@@ -3,9 +3,8 @@
 from pathlib import Path
 import numpy as np
 from datasketch import MinHash
-from typing import Optional, Iterator, List
+from typing import Optional, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from itertools import islice
 
 def _chunk_text(text: str, chunk_size: int = 1024 * 1024) -> Iterator[str]:
     """Split text into chunks for parallel processing."""

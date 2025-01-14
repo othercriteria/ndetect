@@ -1,13 +1,12 @@
 """Interactive UI components using rich."""
 
-from typing import List, Optional
+from typing import List
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
-from rich.style import Style
 
 class InteractiveUI:
     def __init__(self) -> None:

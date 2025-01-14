@@ -1,7 +1,6 @@
 """Tests for file analysis functionality."""
 
 from pathlib import Path
-import pytest
 
 from ndetect.analysis import FileAnalyzer, FileAnalyzerConfig
 

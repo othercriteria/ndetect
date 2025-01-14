@@ -4,7 +4,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import List, Optional
 from rich.console import Console
 
 from ndetect.logging import setup_logging
