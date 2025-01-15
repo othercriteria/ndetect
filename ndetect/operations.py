@@ -8,6 +8,8 @@ import shutil
 import logging
 import os
 
+from ndetect.models import RetentionConfig
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -19,14 +21,52 @@ class MoveOperation:
     timestamp: datetime = field(default_factory=datetime.now)
     executed: bool = False
 
+def select_keeper(
+    files: List[Path],
+    config: RetentionConfig,
+    base_dir: Optional[Path] = None
+) -> Path:
+    """Select which file to keep based on retention criteria."""
+    if not files:
+        raise ValueError("No files provided")
+        
+    # Priority paths take precedence if configured
+    if config.priority_first and config.priority_paths:
+        for pattern in config.priority_paths:
+            for file in files:
+                if file.match(pattern):
+                    return file
+    
+    # Apply the selected strategy
+    if config.strategy == "newest":
+        return max(files, key=lambda p: p.stat().st_mtime)
+    elif config.strategy == "oldest":
+        return min(files, key=lambda p: p.stat().st_mtime)
+    elif config.strategy == "shortest_path":
+        return min(files, key=lambda p: len(str(p)))
+    elif config.strategy == "largest":
+        return max(files, key=lambda p: p.stat().st_size)
+    elif config.strategy == "smallest":
+        return min(files, key=lambda p: p.stat().st_size)
+    else:
+        raise ValueError(f"Unknown retention strategy: {config.strategy}")
+
 def prepare_moves(
     files: List[Path],
     holding_dir: Path,
     preserve_structure: bool,
     group_id: int,
-    base_dir: Optional[Path] = None
+    base_dir: Optional[Path] = None,
+    retention_config: Optional[RetentionConfig] = None
 ) -> List[MoveOperation]:
     """Prepare move operations for a group of files."""
+    if retention_config:
+        # Keep one file based on retention criteria
+        keeper = select_keeper(files, retention_config, base_dir)
+        files_to_move = [f for f in files if f != keeper]
+    else:
+        files_to_move = files
+        
     moves: List[MoveOperation] = []
     used_names: Set[Path] = set()
     
@@ -34,7 +74,7 @@ def prepare_moves(
     if preserve_structure and files and not base_dir:
         base_dir = Path(os.path.commonpath([str(f) for f in files]))
     
-    for file in files:
+    for file in files_to_move:
         if preserve_structure and base_dir:
             try:
                 rel_path = file.relative_to(base_dir)

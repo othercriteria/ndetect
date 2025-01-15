@@ -1,9 +1,9 @@
 """Models for representing text files and their properties."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from datasketch import MinHash
 
 from ndetect.minhash import compute_signature
@@ -80,3 +80,10 @@ class PreviewConfig:
     max_chars: int = 100
     max_lines: int = 3
     truncation_marker: str = '...' 
+
+@dataclass
+class RetentionConfig:
+    """Configuration for file retention criteria."""
+    strategy: str = "newest"  # newest, oldest, shortest_path, largest, smallest
+    priority_paths: List[str] = field(default_factory=list)
+    priority_first: bool = True  # If True, priority paths override other criteria 

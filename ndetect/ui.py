@@ -8,19 +8,21 @@ from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from datetime import datetime
-from ndetect.models import MoveConfig, PreviewConfig
-from ndetect.operations import MoveOperation
+from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
+from ndetect.operations import MoveOperation, select_keeper
 
 class InteractiveUI:
     def __init__(
         self, 
         console: Console, 
         move_config: MoveConfig,
-        preview_config: Optional[PreviewConfig] = None
+        preview_config: Optional[PreviewConfig] = None,
+        retention_config: Optional[RetentionConfig] = None
     ) -> None:
         self.console = console
         self.move_config = move_config
         self.preview_config = preview_config or PreviewConfig()
+        self.retention_config = retention_config
         self.pending_moves: List[MoveOperation] = []
         
     def show_scan_progress(self, paths: List[str]) -> None:
@@ -72,7 +74,7 @@ class InteractiveUI:
         
         # Explicitly set style for all action descriptions and disable markup
         for key, desc in actions.items():
-            self.console.print(f"  [{key}] {desc}", style="default", markup=False)
+            self.console.print(f"  [{key}] {desc}", markup=False)
             
         return Prompt.ask(
             "\nChoose action",
@@ -83,23 +85,59 @@ class InteractiveUI:
     def select_files(self, files: List[Path], prompt: str) -> List[Path]:
         """Let user select files from a group."""
         self.console.print("\nSelect files (space-separated numbers, 'all' or 'none'):")
-        for idx, file in enumerate(files, 1):
-            self.console.print(f"  {idx}. {file}")
-            
-        while True:
-            response = Prompt.ask(prompt).strip().lower()
-            
-            if response == "all":
-                return list(files)
-            elif response == "none":
-                return []
-                
+        
+        # If retention config exists, mark suggested files
+        suggested_keeper = None
+        if self.retention_config:
             try:
-                indices = [int(i) - 1 for i in response.split()]
-                selected = [files[i] for i in indices if 0 <= i < len(files)]
-                return selected
-            except (ValueError, IndexError):
-                self.console.print("[red]Invalid selection. Try again.[/red]")
+                suggested_keeper = select_keeper(files, self.retention_config)
+            except ValueError:
+                pass
+
+        # Display files with suggestion marker
+        for idx, file in enumerate(files, 1):
+            marker = "(*)" if file == suggested_keeper else "   "
+            self.console.print(f"  {idx}. {marker} {file}", markup=False)
+            
+        if suggested_keeper:
+            self.console.print("\n(*) Suggested file to keep based on retention criteria")
+            # Get indices of files to move by default (all except keeper)
+            default_indices = [i for i, f in enumerate(files, 1) if f != suggested_keeper]
+            default_str = " ".join(str(i) for i in default_indices)
+            
+            self.console.print(f"\nDefault action: move files {default_str}")
+            while True:
+                response = Prompt.ask(f"{prompt} (press Enter to accept default)").strip().lower()
+                
+                if response == "":  # Empty response uses default
+                    return [f for f in files if f != suggested_keeper]
+                elif response == "all":
+                    return list(files)
+                elif response == "none":
+                    return []
+                    
+                try:
+                    indices = [int(i) - 1 for i in response.split()]
+                    selected = [files[i] for i in indices if 0 <= i < len(files)]
+                    return selected
+                except (ValueError, IndexError):
+                    self.console.print("[red]Invalid selection. Try again.[/red]")
+        else:
+            # Original behavior when no retention suggestion
+            while True:
+                response = Prompt.ask(prompt).strip().lower()
+                
+                if response == "all":
+                    return list(files)
+                elif response == "none":
+                    return []
+                    
+                try:
+                    indices = [int(i) - 1 for i in response.split()]
+                    selected = [files[i] for i in indices if 0 <= i < len(files)]
+                    return selected
+                except (ValueError, IndexError):
+                    self.console.print("[red]Invalid selection. Try again.[/red]")
                 
     def confirm_action(self, action: str, files: List[Path]) -> bool:
         """Confirm an action before executing it."""

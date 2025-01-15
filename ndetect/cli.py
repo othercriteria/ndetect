@@ -14,7 +14,7 @@ from ndetect.logging import setup_logging
 from ndetect.text_detection import scan_paths
 from ndetect.ui import InteractiveUI
 from ndetect.similarity import SimilarityGraph
-from ndetect.models import TextFile, MoveConfig, PreviewConfig
+from ndetect.models import TextFile, MoveConfig, PreviewConfig, RetentionConfig
 from ndetect.operations import MoveOperation, prepare_moves, execute_moves
 
 __all__ = [
@@ -115,6 +115,22 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Show what would be done without making changes"
     )
+    parser.add_argument(
+        "--retention",
+        choices=["newest", "oldest", "shortest_path", "largest", "smallest"],
+        default="newest",
+        help="Strategy for selecting which file to keep (default: newest)"
+    )
+    parser.add_argument(
+        "--priority-paths",
+        nargs="+",
+        help="Priority paths/patterns for retention (e.g., 'important/*')"
+    )
+    parser.add_argument(
+        "--priority-first",
+        action="store_true",
+        help="Apply priority paths before other retention criteria"
+    )
     
     return parser.parse_args(argv)
 
@@ -123,23 +139,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv if argv is not None else None)
     setup_logging(args.log_file, args.verbose)
     
-    # Create console once
-    console = Console()
+    # Create configurations
+    retention_config = RetentionConfig(
+        strategy=args.retention,
+        priority_paths=args.priority_paths or [],
+        priority_first=args.priority_first
+    )
     
-    # Create UI with configurations
     move_config = MoveConfig(
-        holding_dir=args.holding_dir,
-        preserve_structure=not args.flat_holding,
+        holding_dir=args.holding_dir or Path("duplicates"),
+        preserve_structure=True,
         dry_run=args.dry_run
     )
-    preview_config = PreviewConfig(
-        max_chars=args.preview_chars,
-        max_lines=args.preview_lines
-    )
+    
+    console = Console()
     ui = InteractiveUI(
         console=console,
         move_config=move_config,
-        preview_config=preview_config
+        retention_config=retention_config
     )
     
     try:
@@ -158,7 +175,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 text_files=text_files,
                 threshold=args.threshold,
                 dry_run=args.dry_run,
-                log_file=args.log_file
+                log_file=args.log_file,
+                base_dir=args.base_dir,
+                retention_config=retention_config
             )
         else:
             console.print("[red]Unknown mode specified.[/red]")
@@ -256,6 +275,7 @@ def handle_non_interactive_mode(
     dry_run: bool = False,
     log_file: Optional[Path] = None,
     base_dir: Optional[Path] = None,
+    retention_config: Optional[RetentionConfig] = None,
 ) -> int:
     """Handle non-interactive mode with automated processing."""
     logger = logging.getLogger("ndetect")
@@ -283,7 +303,8 @@ def handle_non_interactive_mode(
             holding_dir=Path("duplicates") / f"group_{i}",
             preserve_structure=True,
             group_id=i,
-            base_dir=base_dir
+            base_dir=base_dir,
+            retention_config=retention_config
         )
         
         # Preview moves
