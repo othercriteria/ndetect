@@ -34,8 +34,11 @@ class InteractiveUI:
             
     def display_group(self, group_id: int, files: List[Path], similarity: float) -> None:
         """Display a group of similar files."""
-        self.console.print(f"\n[bold blue]Group {group_id}[/bold blue]")
-        self.console.print(f"Average similarity: [green]{similarity:.2%}[/green]")
+        # Show similarity based on group size
+        if len(files) == 2:
+            self.console.print(f"~{similarity:.2%} similar")
+        else:
+            self.console.print(f"~{similarity:.2%} avg. similarity")
         
         # Create a table for the files
         table = Table(show_header=True, header_style="bold magenta")
