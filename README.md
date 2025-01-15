@@ -60,11 +60,13 @@ The tool operates in two primary modes:
    - Each group is displayed in a bordered panel showing:
 
      ```bash
-     ╭── Group N (~XX.XX% similar) ──-╮
-     │ File        Size     Modified  │
-     │ path1.txt   252 B   timestamp  │
-     │ path2.txt   6.0 KB  timestamp  │
-     ╰────────────────────────────────╯
+     ~94.53% similar
+     ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+     ┃   ┃ File                                  ┃         Size ┃         Modified ┃
+     ┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+     │ 1 │ ../numpy-2.2.1.dist-info/LICENSE.txt  │ 47,755 bytes │ 2025-01-13 13:57 │
+     │ 2 │ ../scipy-1.15.1.dist-info/LICENSE.txt │ 46,845 bytes │ 2025-01-13 13:57 │
+     └───┴───────────────────────────────────────┴──────────────┴──────────────────┘
      ```
 
    - For groups with 2 files: Shows "~XX.XX% similar"
