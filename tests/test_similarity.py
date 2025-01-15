@@ -165,7 +165,7 @@ def test_similarity_graph_batch_size(tmp_path: Path) -> None:
     groups1 = graph1.get_groups()
     groups2 = graph2.get_groups()
     assert len(groups1) == len(groups2)
-    assert all(g1.files == g2.files for g1, g2 in zip(groups1, groups2))
+    assert all(g1.files == g2.files for g1, g2 in zip(groups1, groups2, strict=False))
 
 
 def test_similarity_graph_keep_group(tmp_path: Path) -> None:

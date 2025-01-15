@@ -34,6 +34,15 @@ include = ["ndetect*"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+ignore = ["E501"]  # Line length handled by black
 
 [tool.mypy]
 python_version = "3.12"
@@ -75,3 +84,8 @@ extend-exclude = '''
 # in the root of the project.
 ^/foo.py  # exclude a file named foo.py in the root of the project
 '''
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"
