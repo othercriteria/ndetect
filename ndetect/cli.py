@@ -14,7 +14,7 @@ from ndetect.logging import setup_logging
 from ndetect.text_detection import scan_paths
 from ndetect.ui import InteractiveUI
 from ndetect.similarity import SimilarityGraph
-from ndetect.models import TextFile, MoveConfig, PreviewConfig, RetentionConfig
+from ndetect.models import TextFile, MoveConfig, RetentionConfig
 from ndetect.operations import MoveOperation, prepare_moves, execute_moves
 
 __all__ = [
