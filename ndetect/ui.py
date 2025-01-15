@@ -1,6 +1,6 @@
 """Interactive UI components using rich."""
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional, Any
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -10,8 +10,18 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from datetime import datetime
 
 class InteractiveUI:
-    def __init__(self) -> None:
-        self.console = Console()
+    def __init__(
+        self,
+        console: Optional[Console] = None,
+        preview_config: Optional[Dict[str, Any]] = None
+    ) -> None:
+        self.console = console or Console()
+        # Use provided config or defaults
+        self.preview_config = preview_config or {
+            'max_chars': 100,
+            'max_lines': 3,
+            'truncation_marker': '...'
+        }
         
     def show_scan_progress(self, paths: List[str]) -> None:
         """Show progress while scanning files."""
@@ -104,6 +114,33 @@ class InteractiveUI:
         """Display a success message."""
         self.console.print(f"[green]{message}[/green]")
         
+    def get_file_preview(self, file: Path) -> str:
+        """Get a truncated preview of file contents."""
+        try:
+            with file.open('r', encoding='utf-8') as f:
+                # Read first few lines
+                lines = []
+                total_chars = 0
+                for _ in range(self.preview_config['max_lines']):
+                    line = f.readline()
+                    if not line:
+                        break
+                    # Strip trailing whitespace but keep leading whitespace
+                    line = line.rstrip()
+                    lines.append(line)
+                    total_chars += len(line)
+                    
+                preview = '\n'.join(lines)
+                
+                # If we're over the character limit, truncate the last line
+                if len(preview) > self.preview_config['max_chars']:
+                    marker = self.preview_config['truncation_marker']
+                    preview = preview[:(self.preview_config['max_chars'] - len(marker))] + marker
+                
+                return preview
+        except Exception as e:
+            return f"[red]Error reading file: {e}[/red]"
+
     def show_detailed_info(self, files: List[Path], similarities: Dict[Tuple[Path, Path], float]) -> None:
         """Display detailed information about files in a group."""
         # Create a table for file metadata
@@ -144,15 +181,8 @@ class InteractiveUI:
         preview_table.add_column("File", style="cyan")
         preview_table.add_column("Preview", style="white")
         
-        # Add file preview rows (first 5 lines of each file)
         for file in files:
-            try:
-                with file.open('r', encoding='utf-8') as f:
-                    preview = '\n'.join(f.readlines()[:5])
-                    if len(preview) > 200:  # Truncate long previews
-                        preview = preview[:197] + "..."
-            except Exception as e:
-                preview = f"[red]Error reading file: {e}[/red]"
+            preview = self.get_file_preview(file)
             preview_table.add_row(str(file), preview)
         
         # Display all tables in panels

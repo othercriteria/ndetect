@@ -78,6 +78,18 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=1024 * 1024,
         help="Chunk size in bytes for processing large files (default: 1MB)",
     )
+    parser.add_argument(
+        "--preview-chars",
+        type=int,
+        default=100,
+        help="Maximum characters in file preview (default: 100)",
+    )
+    parser.add_argument(
+        "--preview-lines",
+        type=int,
+        default=3,
+        help="Maximum lines in file preview (default: 3)",
+    )
     
     return parser.parse_args(args)
 
@@ -86,37 +98,38 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv if argv is not None else None)
     setup_logging(args.log_file, args.verbose)
     
-    ui = InteractiveUI()
-    console = Console()  # For system/error messages
+    # Create console once
+    console = Console()
+    
+    # Create UI with preview configuration
+    ui = InteractiveUI(
+        console=console,
+        preview_config={
+            'max_chars': args.preview_chars,
+            'max_lines': args.preview_lines,
+            'truncation_marker': '...'
+        }
+    )
     
     try:
-        # Show scanning progress
-        ui.show_scan_progress(args.paths)
-        text_files = scan_paths(
-            args.paths,
-            min_printable_ratio=args.min_printable_ratio,
-            num_perm=args.num_perm,
-            shingle_size=args.shingle_size,
-        )
-        
+        text_files = scan_paths(args.paths, min_printable_ratio=args.min_printable_ratio, num_perm=args.num_perm, shingle_size=args.shingle_size)
         if not text_files:
-            console.print("[yellow]No text files found in the specified paths.[/yellow]")
-            return 0
+            console.print("[red]No valid text files found.[/red]")
+            return 1
             
-        console.print(f"\nFound [green]{len(text_files)}[/green] text files.")
+        console.print(f"Found {len(text_files)} text files.")
         
         if args.mode == "interactive":
             return handle_interactive_mode(ui, text_files, args.threshold)
         else:
-            return handle_non_interactive_mode(console, text_files, args.threshold)
+            console.print("[red]Unknown mode specified.[/red]")
+            return 1
             
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         return 130
     except Exception as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
-        if args.verbose:
-            console.print_exception()
+        console.print(f"[red]Error: {e}[/red]")
         return 1
 
 def handle_interactive_mode(ui: InteractiveUI, text_files: List[TextFile], threshold: float) -> int:
