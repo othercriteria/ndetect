@@ -25,10 +25,10 @@ __all__ = [
 
 logger = logging.getLogger(__name__)
 
-def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
+def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="Detect and manage near-duplicate text files using MinHash"
+        description="Detect and manage similar text files."
     )
     parser.add_argument(
         "paths",
@@ -101,13 +101,13 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--holding-dir",
         type=Path,
-        default=Path("./ndetect-holding"),
-        help="Directory for moved files (default: ./ndetect-holding)"
+        default=Path("holding"),
+        help="Directory to move duplicate files to (default: ./holding)"
     )
     parser.add_argument(
         "--flat-holding",
         action="store_true",
-        help="Don't preserve directory structure in holding directory"
+        help="Don't preserve directory structure when moving files"
     )
     parser.add_argument(
         "--dry-run",
@@ -115,7 +115,7 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         help="Show what would be done without making changes"
     )
     
-    return parser.parse_args(args)
+    return parser.parse_args(argv)
 
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI."""
