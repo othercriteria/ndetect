@@ -212,7 +212,6 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 #### In Progress 🚧
 
 - Move to holding directory implementation
-- Keyboard shortcuts and navigation
 
 ### 7. Non-Interactive Mode 🚧
 
