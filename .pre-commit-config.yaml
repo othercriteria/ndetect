@@ -6,7 +6,7 @@ repos:
     hooks:
       - id: dmypy
         name: dmypy
-        entry: python .pre-commit-hooks/dmypy_check.py
+        entry: dmypy check .
         language: system
         pass_filenames: false
         types: [python]
