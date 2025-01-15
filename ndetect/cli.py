@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 from ndetect.logging import setup_logging
 from ndetect.text_detection import scan_paths
@@ -134,10 +135,27 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 def handle_interactive_mode(ui: InteractiveUI, text_files: List[TextFile], threshold: float) -> int:
     """Handle interactive mode with rich UI."""
-    # Build similarity graph
-    graph = SimilarityGraph(threshold=threshold)
-    graph.add_files(text_files)
+    # Build similarity graph with progress display
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=ui.console,
+    ) as progress:
+        task = progress.add_task(
+            "Building similarity graph...",
+            total=len(text_files)
+        )
+        
+        graph = SimilarityGraph(threshold=threshold)
+        batch_size = 1000
+        for i in range(0, len(text_files), batch_size):
+            batch = text_files[i:i + batch_size]
+            graph.add_files(batch)
+            progress.advance(task, len(batch))
     
+    # Rest of the function remains the same
     while True:
         groups = graph.get_groups()
         if not groups:

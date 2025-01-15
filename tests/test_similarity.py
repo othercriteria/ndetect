@@ -1,6 +1,6 @@
 from pathlib import Path
 from datetime import datetime
-
+import networkx as nx
 from ndetect.similarity import SimilarityGraph
 from ndetect.models import TextFile
 from ndetect.minhash import create_minhash
@@ -20,12 +20,14 @@ def create_test_file(tmp_path: Path, name: str, content: str) -> TextFile:
 
 def test_similarity_graph_empty() -> None:
     graph = SimilarityGraph()
+    assert isinstance(graph.graph, nx.Graph)
     assert len(graph.get_groups()) == 0
 
 def test_similarity_graph_single_file(tmp_path: Path) -> None:
     graph = SimilarityGraph()
     file = create_test_file(tmp_path, "test.txt", "hello world")
     graph.add_files([file])
+    assert isinstance(graph.graph, nx.Graph)
     assert len(graph.get_groups()) == 0  # Single file should not form a group
 
 def test_similarity_graph_similar_files(tmp_path: Path) -> None:
@@ -113,3 +115,42 @@ def test_similarity_graph_threshold(tmp_path: Path) -> None:
     # With low threshold, files should be grouped
     low_threshold.add_files([file1, file2])
     assert len(low_threshold.get_groups()) == 1 
+
+def test_similarity_graph_cache(tmp_path: Path) -> None:
+    """Test that signature caching works correctly."""
+    graph = SimilarityGraph(threshold=0.8)
+    
+    # Create two identical files
+    file1 = create_test_file(tmp_path, "test1.txt", "hello world")
+    file2 = create_test_file(tmp_path, "test2.txt", "hello world")
+    
+    # Add files and check cache
+    graph.add_files([file1, file2])
+    assert len(graph._signature_cache) == 2
+    
+    # Remove one file and verify cache cleanup
+    graph.remove_files([file1.path])
+    assert len(graph._signature_cache) == 1
+    assert file1.path not in graph._signature_cache
+    assert file2.path in graph._signature_cache
+
+def test_similarity_graph_batch_size(tmp_path: Path) -> None:
+    """Test that batching doesn't affect results."""
+    graph1 = SimilarityGraph(threshold=0.8)
+    graph2 = SimilarityGraph(threshold=0.8)
+    
+    # Create several similar files
+    files = [
+        create_test_file(tmp_path, f"test{i}.txt", "hello world")
+        for i in range(5)
+    ]
+    
+    # Add files with different batch sizes
+    graph1.add_files(files, batch_size=2)
+    graph2.add_files(files, batch_size=3)
+    
+    # Results should be identical
+    groups1 = graph1.get_groups()
+    groups2 = graph2.get_groups()
+    assert len(groups1) == len(groups2)
+    assert all(g1.files == g2.files for g1, g2 in zip(groups1, groups2)) 
