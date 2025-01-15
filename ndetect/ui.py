@@ -1,6 +1,6 @@
 """Interactive UI components using rich."""
 
-from typing import List, Dict, Tuple, Optional, Any
+from typing import List, Dict, Tuple, Optional
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -8,20 +8,19 @@ from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from datetime import datetime
+from ndetect.models import MoveConfig, MoveOperation, PreviewConfig
 
 class InteractiveUI:
     def __init__(
-        self,
-        console: Optional[Console] = None,
-        preview_config: Optional[Dict[str, Any]] = None
+        self, 
+        console: Console, 
+        move_config: MoveConfig,
+        preview_config: Optional[PreviewConfig] = None
     ) -> None:
-        self.console = console or Console()
-        # Use provided config or defaults
-        self.preview_config = preview_config or {
-            'max_chars': 100,
-            'max_lines': 3,
-            'truncation_marker': '...'
-        }
+        self.console = console
+        self.move_config = move_config
+        self.preview_config = preview_config or PreviewConfig()
+        self.pending_moves: List[MoveOperation] = []
         
     def show_scan_progress(self, paths: List[str]) -> None:
         """Show progress while scanning files."""
@@ -34,8 +33,11 @@ class InteractiveUI:
             
     def display_group(self, group_id: int, files: List[Path], similarity: float) -> None:
         """Display a group of similar files."""
-        self.console.print(f"\n[bold blue]Group {group_id}[/bold blue]")
-        self.console.print(f"Average similarity: [green]{similarity:.2%}[/green]")
+        # Show similarity based on group size
+        if len(files) == 2:
+            self.console.print(f"~{similarity:.2%} similar")
+        else:
+            self.console.print(f"~{similarity:.2%} avg. similarity")
         
         # Create a table for the files
         table = Table(show_header=True, header_style="bold magenta")
@@ -120,7 +122,7 @@ class InteractiveUI:
                 # Read first few lines
                 lines = []
                 total_chars = 0
-                for _ in range(self.preview_config['max_lines']):
+                for _ in range(self.preview_config.max_lines):
                     line = f.readline()
                     if not line:
                         break
@@ -132,9 +134,9 @@ class InteractiveUI:
                 preview = '\n'.join(lines)
                 
                 # If we're over the character limit, truncate the last line
-                if len(preview) > self.preview_config['max_chars']:
-                    marker = self.preview_config['truncation_marker']
-                    preview = preview[:(self.preview_config['max_chars'] - len(marker))] + marker
+                if len(preview) > self.preview_config.max_chars:
+                    marker = self.preview_config.truncation_marker
+                    preview = preview[:(self.preview_config.max_chars - len(marker))] + marker
                 
                 return preview
         except Exception as e:
@@ -190,3 +192,20 @@ class InteractiveUI:
         self.console.print(Panel(sim_table, title="[bold blue]Similarity Scores"))
         self.console.print()
         self.console.print(Panel(preview_table, title="[bold blue]File Previews")) 
+
+    def display_move_preview(self, moves: List[MoveOperation]) -> None:
+        """Display preview of move operations."""
+        table = Table(title="Planned Moves")
+        table.add_column("From")
+        table.add_column("To")
+        
+        for move in moves:
+            table.add_row(
+                str(move.source),
+                str(move.destination),
+                style="dim" if self.move_config.dry_run else None
+            )
+            
+        self.console.print(table)
+        if self.move_config.dry_run:
+            self.console.print("[yellow]DRY RUN - No files will be moved[/yellow]") 
