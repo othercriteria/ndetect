@@ -8,7 +8,8 @@ from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from datetime import datetime
-from ndetect.models import MoveConfig, MoveOperation, PreviewConfig
+from ndetect.models import MoveConfig, PreviewConfig
+from ndetect.operations import MoveOperation
 
 class InteractiveUI:
     def __init__(

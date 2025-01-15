@@ -1,6 +1,6 @@
 """Models for representing text files and their properties."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -73,15 +73,6 @@ class MoveConfig:
     holding_dir: Path
     preserve_structure: bool = True
     dry_run: bool = False
-
-@dataclass
-class MoveOperation:
-    """Record of a move operation."""
-    source: Path
-    destination: Path
-    group_id: int
-    timestamp: datetime = field(default_factory=datetime.now)
-    executed: bool = False 
 
 @dataclass
 class PreviewConfig:

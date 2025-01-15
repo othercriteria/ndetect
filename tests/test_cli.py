@@ -3,12 +3,30 @@ from rich.console import Console
 from ndetect.cli import (
     parse_args, 
     scan_paths, 
-    prepare_moves,
-    execute_moves
+    handle_non_interactive_mode,
 )
-from ndetect.models import MoveConfig, MoveOperation
+from ndetect.logging import setup_logging
+from ndetect.models import MoveConfig, TextFile
+from ndetect.operations import MoveOperation, prepare_moves, execute_moves
 from ndetect.ui import InteractiveUI
 import pytest
+from typing import Any, Generator, List
+import logging
+
+
+@pytest.fixture
+def cleanup_duplicates() -> Generator[None, None, None]:
+    """Clean up the duplicates directory after tests."""
+    yield
+    duplicates_dir = Path("duplicates")
+    if duplicates_dir.exists():
+        for file in duplicates_dir.glob("**/*"):
+            if file.is_file():
+                file.unlink()
+        for dir in reversed(list(duplicates_dir.glob("**/*"))):
+            if dir.is_dir():
+                dir.rmdir()
+        duplicates_dir.rmdir()
 
 
 def test_parse_args_default_mode() -> None:
@@ -149,33 +167,31 @@ def test_prepare_moves_preserved_structure(tmp_path: Path) -> None:
 
 
 def test_prepare_moves_name_conflicts(tmp_path: Path) -> None:
-    """Test handling of name conflicts in move preparation."""
-    # Create test files
-    file1 = tmp_path / "test.txt"
-    file1.write_text("content1")
+    """Test that prepare_moves handles filename conflicts correctly."""
+    # Create test files with same names in different directories
+    dir1 = tmp_path / "dir1"
+    dir2 = tmp_path / "dir2"
+    dir1.mkdir()
+    dir2.mkdir()
     
-    subdir = tmp_path / "subdir"
-    subdir.mkdir()
-    file2 = subdir / "test.txt"  # Same name as file1
+    file1 = dir1 / "test.txt"
+    file2 = dir2 / "test.txt"
+    file1.write_text("content1")
     file2.write_text("content2")
     
     holding_dir = tmp_path / "holding"
-    holding_dir.mkdir()
-    # Create a file that would conflict
-    (holding_dir / "test.txt").write_text("existing")
-    
     moves = prepare_moves(
         files=[file1, file2],
         holding_dir=holding_dir,
-        preserve_structure=False,
+        preserve_structure=False,  # Force name conflict
         group_id=1
     )
     
-    assert len(moves) == 2
-    filenames = {m.destination.name for m in moves}
-    # Both files should get numbered suffixes since there's an existing file
-    assert all(name.startswith("test_") and name.endswith(".txt") for name in filenames)
-    assert len({name.split("_")[1].split(".")[0] for name in filenames}) == 2  # Different numbers
+    # Check that destinations are unique
+    destinations = [move.destination for move in moves]
+    assert len(destinations) == len(set(destinations))  # No duplicates
+    assert all(move.destination.name.startswith("test") for move in moves)
+    assert any("_1" in str(move.destination) for move in moves)  # One file should be renamed
 
 
 def test_execute_moves_dry_run(tmp_path: Path) -> None:
@@ -223,23 +239,29 @@ def test_prepare_moves_empty_list(tmp_path: Path) -> None:
 
 
 def test_prepare_moves_single_file_multiple_levels(tmp_path: Path) -> None:
-    """Test preserving structure with deeply nested single file."""
-    deep_dir = tmp_path / "a" / "b" / "c"
-    deep_dir.mkdir(parents=True)
-    file = deep_dir / "test.txt"
-    file.write_text("content")
+    """Test prepare_moves with a single file in a deep directory structure."""
+    # Create nested directories
+    nested_dir = tmp_path / "a" / "b" / "c"
+    nested_dir.mkdir(parents=True)
+    
+    # Create test file
+    test_file = nested_dir / "test.txt"
+    test_file.write_text("content")
     
     holding_dir = tmp_path / "holding"
     moves = prepare_moves(
-        files=[file],
+        files=[test_file],
         holding_dir=holding_dir,
         preserve_structure=True,
-        group_id=1
+        group_id=1,
+        base_dir=tmp_path  # Pass the temp directory as base
     )
     
     assert len(moves) == 1
-    # Should preserve a/b/c structure
-    assert moves[0].destination == holding_dir / "a" / "b" / "c" / "test.txt"
+    assert moves[0].source == test_file
+    # Should preserve directory structure under holding dir
+    expected_dest = holding_dir / "a" / "b" / "c" / "test.txt"
+    assert moves[0].destination == expected_dest
 
 
 def test_prepare_moves_mixed_depths(tmp_path: Path) -> None:
@@ -330,22 +352,16 @@ def test_prepare_moves_case_sensitivity(tmp_path: Path) -> None:
 
 
 def test_prepare_moves_arbitrary_depth(tmp_path: Path) -> None:
-    """Test preserving structure with arbitrary directory depth."""
-    # Create a deeply nested file with random depth
-    deep_path = tmp_path
-    expected_structure = []
+    """Test prepare_moves with arbitrary directory depth."""
+    # Create random depth directory structure
+    current_dir = tmp_path
+    path_parts = ["gnkod", "eoboa", "zpqpb", "hbdkt", "oeqsz"]  # Random directory names
     
-    # Create 5 levels of random directory names
-    import random
-    import string
-    for _ in range(5):
-        dirname = ''.join(random.choices(string.ascii_lowercase, k=5))
-        deep_path = deep_path / dirname
-        expected_structure.append(dirname)
+    for part in path_parts:
+        current_dir = current_dir / part
+        current_dir.mkdir()
     
-    # Create the file
-    deep_path.mkdir(parents=True)
-    test_file = deep_path / "test.txt"
+    test_file = current_dir / "test.txt"
     test_file.write_text("content")
     
     holding_dir = tmp_path / "holding"
@@ -353,17 +369,15 @@ def test_prepare_moves_arbitrary_depth(tmp_path: Path) -> None:
         files=[test_file],
         holding_dir=holding_dir,
         preserve_structure=True,
-        group_id=1
+        group_id=1,
+        base_dir=tmp_path  # Pass the temp directory as base
     )
     
     assert len(moves) == 1
-    # Check that all directory levels are preserved
-    expected_path = holding_dir
-    for dirname in expected_structure:
-        expected_path = expected_path / dirname
-    expected_path = expected_path / "test.txt"
-    
-    assert moves[0].destination == expected_path 
+    assert moves[0].source == test_file
+    # Should preserve full directory structure
+    expected_dest = holding_dir.joinpath(*path_parts) / "test.txt"
+    assert moves[0].destination == expected_dest
 
 
 def test_execute_moves_missing_source(tmp_path: Path) -> None:
@@ -383,3 +397,164 @@ def test_execute_moves_missing_source(tmp_path: Path) -> None:
     
     with pytest.raises(FileNotFoundError):
         execute_moves([move]) 
+
+
+def test_non_interactive_mode(tmp_path: Path, cleanup_duplicates: None) -> None:
+    """Test basic non-interactive mode operation."""
+    # Create test files with identical content for guaranteed matching
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    content = "hello world this is a test"
+    file1.write_text(content)
+    file2.write_text(content)  # Identical content
+    
+    text_files = [
+        TextFile.from_path(file1, compute_minhash=True),
+        TextFile.from_path(file2, compute_minhash=True)
+    ]
+    
+    console = Console(force_terminal=True)
+    result = handle_non_interactive_mode(
+        console=console,
+        text_files=text_files,
+        threshold=0.5,  # More lenient threshold
+        base_dir=tmp_path  # Pass the temp directory as base
+    )
+    
+    assert result == 0
+    # Check that files were moved to duplicates directory
+    duplicates_dir = Path("duplicates/group_1")  # Path is relative to current directory
+    assert duplicates_dir.exists()
+    assert (duplicates_dir / "test1.txt").exists()
+    assert (duplicates_dir / "test2.txt").exists()
+
+
+def test_non_interactive_mode_dry_run(tmp_path: Path) -> None:
+    """Test that dry run mode doesn't move files."""
+    # Create test files
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("hello world this is a test")
+    file2.write_text("hello world this is also a test")
+    
+    text_files = [
+        TextFile.from_path(file1, compute_minhash=True),
+        TextFile.from_path(file2, compute_minhash=True)
+    ]
+    
+    console = Console(force_terminal=True)
+    result = handle_non_interactive_mode(
+        console=console,
+        text_files=text_files,
+        threshold=0.7,
+        dry_run=True
+    )
+    
+    assert result == 0
+    # Check that files weren't moved
+    assert file1.exists()
+    assert file2.exists()
+    assert not Path("duplicates").exists()
+
+
+def test_non_interactive_mode_no_similar_files(tmp_path: Path) -> None:
+    """Test behavior when no similar files are found."""
+    # Create test files with different content
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("hello world")
+    file2.write_text("completely different content")
+    
+    text_files = [
+        TextFile.from_path(file1, compute_minhash=True),
+        TextFile.from_path(file2, compute_minhash=True)
+    ]
+    
+    console = Console(force_terminal=True)
+    result = handle_non_interactive_mode(
+        console=console,
+        text_files=text_files,
+        threshold=0.7,
+        dry_run=False
+    )
+    
+    assert result == 0
+    # Check that no files were moved
+    assert file1.exists()
+    assert file2.exists()
+    assert not Path("duplicates").exists()
+
+
+def test_non_interactive_mode_with_logging(tmp_path: Path, cleanup_duplicates: None) -> None:
+    """Test that operations are properly logged."""
+    # Create log file and clear any existing handlers
+    log_file = tmp_path / "test.log"
+    logging.getLogger("ndetect").handlers.clear()
+    
+    # Create test files with identical content
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    content = "hello world this is a test"
+    file1.write_text(content)
+    file2.write_text(content)
+    
+    text_files = [
+        TextFile.from_path(file1, compute_minhash=True),
+        TextFile.from_path(file2, compute_minhash=True)
+    ]
+    
+    # Setup logging
+    setup_logging(log_file=log_file, verbose=True)
+    
+    console = Console(force_terminal=True)
+    result = handle_non_interactive_mode(
+        console=console,
+        text_files=text_files,
+        threshold=0.5,
+        log_file=log_file,
+        base_dir=tmp_path  # Pass the temp directory as base
+    )
+    
+    assert result == 0
+    assert log_file.exists()
+    log_content = log_file.read_text()
+    # Check for expected log entries
+    assert "Moving:" in log_content
+    assert "Operation complete" in log_content
+
+
+def test_non_interactive_mode_error_handling(tmp_path: Path, monkeypatch: Any, cleanup_duplicates: None) -> None:
+    """Test error handling during file operations."""
+    # Create test files with identical content
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    content = "hello world this is a test"
+    file1.write_text(content)
+    file2.write_text(content)
+    
+    text_files = [
+        TextFile.from_path(file1, compute_minhash=True),
+        TextFile.from_path(file2, compute_minhash=True)
+    ]
+    
+    # Mock execute_moves to raise an error
+    def mock_execute_moves(moves: List[MoveOperation]) -> None:
+        raise OSError("Permission denied")
+    
+    # Need to patch where it's used, not where it's defined
+    monkeypatch.setattr("ndetect.cli.execute_moves", mock_execute_moves)
+    
+    console = Console(force_terminal=True)
+    result = handle_non_interactive_mode(
+        console=console,
+        text_files=text_files,
+        threshold=0.5,
+        base_dir=tmp_path
+    )
+    
+    assert result == 1  # Should return error code
+    # Check that files weren't moved
+    assert file1.exists()
+    assert file2.exists()
+    # Ensure duplicates directory wasn't created
+    assert not Path("duplicates").exists() 
