@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 
 from ndetect.logging import setup_logging
 from ndetect.text_detection import scan_paths
@@ -78,6 +79,18 @@ def parse_args(args: Optional[List[str]] = None) -> argparse.Namespace:
         default=1024 * 1024,
         help="Chunk size in bytes for processing large files (default: 1MB)",
     )
+    parser.add_argument(
+        "--preview-chars",
+        type=int,
+        default=100,
+        help="Maximum characters in file preview (default: 100)",
+    )
+    parser.add_argument(
+        "--preview-lines",
+        type=int,
+        default=3,
+        help="Maximum lines in file preview (default: 3)",
+    )
     
     return parser.parse_args(args)
 
@@ -86,73 +99,99 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv if argv is not None else None)
     setup_logging(args.log_file, args.verbose)
     
-    ui = InteractiveUI()
-    console = Console()  # For system/error messages
+    # Create console once
+    console = Console()
+    
+    # Create UI with preview configuration
+    ui = InteractiveUI(
+        console=console,
+        preview_config={
+            'max_chars': args.preview_chars,
+            'max_lines': args.preview_lines,
+            'truncation_marker': '...'
+        }
+    )
     
     try:
-        # Show scanning progress
-        ui.show_scan_progress(args.paths)
-        text_files = scan_paths(
-            args.paths,
-            min_printable_ratio=args.min_printable_ratio,
-            num_perm=args.num_perm,
-            shingle_size=args.shingle_size,
-        )
-        
+        text_files = scan_paths(args.paths, min_printable_ratio=args.min_printable_ratio, num_perm=args.num_perm, shingle_size=args.shingle_size)
         if not text_files:
-            console.print("[yellow]No text files found in the specified paths.[/yellow]")
-            return 0
+            console.print("[red]No valid text files found.[/red]")
+            return 1
             
-        console.print(f"\nFound [green]{len(text_files)}[/green] text files.")
+        console.print(f"Found {len(text_files)} text files.")
         
         if args.mode == "interactive":
             return handle_interactive_mode(ui, text_files, args.threshold)
         else:
-            return handle_non_interactive_mode(console, text_files, args.threshold)
+            console.print("[red]Unknown mode specified.[/red]")
+            return 1
             
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         return 130
     except Exception as e:
-        console.print(f"[red]Error: {str(e)}[/red]")
-        if args.verbose:
-            console.print_exception()
+        console.print(f"[red]Error: {e}[/red]")
         return 1
 
 def handle_interactive_mode(ui: InteractiveUI, text_files: List[TextFile], threshold: float) -> int:
     """Handle interactive mode with rich UI."""
-    # Build similarity graph
-    graph = SimilarityGraph(threshold=threshold)
-    graph.add_files(text_files)
+    # Build similarity graph with progress display
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        console=ui.console,
+    ) as progress:
+        task = progress.add_task(
+            "Building similarity graph...",
+            total=len(text_files)
+        )
+        
+        graph = SimilarityGraph(threshold=threshold)
+        batch_size = 1000
+        for i in range(0, len(text_files), batch_size):
+            batch = text_files[i:i + batch_size]
+            graph.add_files(batch)
+            progress.advance(task, len(batch))
     
     while True:
-        groups = graph.get_groups()
+        groups = graph.get_groups()  # Now returns groups sorted by similarity
         if not groups:
             ui.show_success("No more duplicate groups found.")
             return 0
-            
-        for group in groups:
+        
+        # Work with the highest similarity group
+        group = groups[0]
+        while True:
             ui.display_group(group.id, group.files, group.similarity)
             action = ui.prompt_action()
             
             if action == "q":
                 return 0
-            elif action == "s":
-                continue
             elif action == "k":
-                continue  # Skip to next group
+                # Remove all edges in this group to prevent it from appearing again
+                graph.remove_group(group.files)
+                break
             elif action == "d":
                 files = ui.select_files(group.files, "Select files to delete")
                 if files and ui.confirm_action("delete", files):
                     for file in files:
                         file.unlink()
                     graph.remove_files(files)
+                    # Check if we need to move to next group
+                    groups = graph.get_groups()
+                    if not groups or groups[0].files != group.files:
+                        break
             elif action == "m":
                 # TODO: Implement move to holding directory
                 ui.show_error("Move to holding not yet implemented")
             elif action == "i":
-                # TODO: Show detailed file information
-                ui.show_error("Detailed info not yet implemented")
+                # Get pairwise similarities for the group
+                similarities = graph.get_group_similarities(group.files)
+                ui.show_detailed_info(group.files, similarities)
+                # Wait for user to press enter before continuing with same group
+                ui.console.input("\nPress Enter to continue...")
     
     return 0
 
