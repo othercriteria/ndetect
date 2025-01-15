@@ -108,10 +108,10 @@ The tool operates in two primary modes:
    - The user is prompted to act on each group.
 
 3. **Available Actions**:
-   - **[a] Keep all**: No changes are made to this group.
-   - **[b] Delete duplicates**: The user selects which files to delete from the group.
-   - **[c] Move duplicates to holding**: The user selects files to move to a holding directory.
-   - **[d] Inspect details**: Show similarity scores for the group or detailed file metadata.
+   - **[k] Keep all**: No changes are made to this group.
+   - **[d] Delete duplicates**: The user selects which files to delete from the group.
+   - **[m] Move duplicates to holding**: The user selects files to move to a holding directory.
+   - **[i] Show details**: Show similarity scores for the group or detailed file metadata.
 
 4. **Dynamic Updates**:
    - After each action, groups are recalculated to account for changes (e.g., removed or moved files).

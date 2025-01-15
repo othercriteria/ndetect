@@ -178,19 +178,22 @@ def test_similarity_graph_keep_group(tmp_path: Path) -> None:
 
 def test_similarity_graph_sorting(tmp_path: Path) -> None:
     """Test that groups are returned in descending order of similarity."""
-    # Moderate threshold to ensure groups are formed but don't collapse to a single group
-    graph = SimilarityGraph(threshold=0.5)
+    graph = SimilarityGraph(threshold=0.5)  # Low threshold to ensure all groups form
     
-    # Create groups with different similarities
-    file1 = create_test_file(tmp_path, "test1.txt", "hello world")
-    file2 = create_test_file(tmp_path, "test2.txt", "hello world")  # identical
-    file3 = create_test_file(tmp_path, "test3.txt", "hello there")  # similar
-    file4 = create_test_file(tmp_path, "test4.txt", "hello there")  # similar
+    # Create pairs with different internal similarities but very distinct from other pairs
+    file1 = create_test_file(tmp_path, "test1.txt", "hello world")  # Identical pair
+    file2 = create_test_file(tmp_path, "test2.txt", "hello world")  # sim = 1.0
     
-    graph.add_files([file1, file2, file3, file4])
+    file3 = create_test_file(tmp_path, "test3.txt", "python programming")  # Similar pair
+    file4 = create_test_file(tmp_path, "test4.txt", "python programmer")   # sim ≈ 0.7
+    
+    file5 = create_test_file(tmp_path, "test5.txt", "red apple")  # Less similar pair
+    file6 = create_test_file(tmp_path, "test6.txt", "reed apple") # sim ≈ 0.6
+    
+    graph.add_files([file1, file2, file3, file4, file5, file6])
     groups = graph.get_groups()
     
-    assert len(groups) > 1
-    # Verify descending order
+    assert len(groups) == 3  # Should have three distinct groups
+    # Verify descending order with some tolerance for MinHash approximation
     for i in range(len(groups) - 1):
-        assert groups[i].similarity >= groups[i + 1].similarity 
+        assert groups[i].similarity >= groups[i + 1].similarity
