@@ -1,5 +1,9 @@
 # `ndetect`: Near-Duplicate Detection using MinHash
 
+![ndetect](./docs/ndetect.webp)
+
+(AI slop logo; disregard the "TM"!)
+
 ## Core Behavior
 
 ### 1. Identify Near-Duplicates
@@ -51,10 +55,10 @@ The tool operates in two primary modes:
 2. **Group Presentation**:
    - Each group is displayed in a bordered panel showing:
 
-     ```bash
+     ```console
      ~94.53% similar
      ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
-     ┃   ┃ File                                  ┃         Size ┃         Modified ┃
+     ┃ # ┃ File                                  ┃         Size ┃         Modified ┃
      ┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
      │ 1 │ ../numpy-2.2.1.dist-info/LICENSE.txt  │ 47,755 bytes │ 2025-01-13 13:57 │
      │ 2 │ ../scipy-1.15.1.dist-info/LICENSE.txt │ 46,845 bytes │ 2025-01-13 13:57 │
@@ -91,10 +95,10 @@ The tool operates in two primary modes:
 2. **Group Presentation**:
    - Duplicate groups are presented to the user, e.g.:
 
-     ```bash
-     Found duplicate groups:
-     [1] file1.txt, file2.txt
-     [2] file3.txt, file4.txt, file5.txt
+     ```console
+     Select files (space-separated numbers, 'all' or 'none'):
+       1. ../numpy-2.2.1.dist-info/LICENSE.txt
+       2. ../scipy-1.15.1.dist-info/LICENSE.txt
      ```
 
    - The user is prompted to act on each group.
