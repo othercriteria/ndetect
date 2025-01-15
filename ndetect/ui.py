@@ -24,29 +24,27 @@ class InteractiveUI:
             
     def display_group(self, group_id: int, files: List[Path], similarity: float) -> None:
         """Display a group of similar files."""
+        self.console.print(f"\n[bold blue]Group {group_id}[/bold blue]")
+        self.console.print(f"Average similarity: [green]{similarity:.2%}[/green]")
+        
+        # Create a table for the files
         table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("#", style="dim")
         table.add_column("File", style="cyan")
         table.add_column("Size", justify="right", style="green")
         table.add_column("Modified", justify="right", style="yellow")
         
-        for file in files:
+        # Add rows for each file
+        for idx, file in enumerate(files, 1):
             stats = file.stat()
             table.add_row(
+                str(idx),
                 str(file),
                 f"{stats.st_size:,} bytes",
-                f"{stats.st_mtime:.0f}"
+                datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M")
             )
         
-        similarity_desc = (
-            f"~{similarity:.2%} similar" if len(files) == 2
-            else f"~{similarity:.2%} avg. similarity"
-        )
-            
-        self.console.print(Panel(
-            table,
-            title=f"[bold blue]Group {group_id} ({similarity_desc})",
-            border_style="blue"
-        ))
+        self.console.print(table)
         
     def prompt_action(self) -> str:
         """Prompt user for action on current group."""
