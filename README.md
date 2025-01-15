@@ -1,19 +1,22 @@
-### **Specification for a CLI Tool: Near-Duplicate Detection using MinHash**
+# **Specification for a CLI Tool: Near-Duplicate Detection using MinHash**
 
 ---
 
-### **Tool Name**: `ndetect`
+## **Tool Name**: `ndetect`
 
 ---
 
 ### **Core Behavior**
 
 #### **1. Identify Near-Duplicates**
+
 - The tool identifies near-duplicate text documents based on their **content similarity** using MinHash.
 - **Groups** of duplicates are formed by detecting transitive relationships (e.g., if A is similar to B and B is similar to C, all three form a group).
 
 #### **2. Modes of Operation**
+
 The tool operates in two primary modes:
+
 1. **Interactive Mode** (default):
    - Groups of duplicates are displayed in a clear tabular format, showing:
      - File paths
@@ -36,6 +39,7 @@ The tool operates in two primary modes:
      - Logging of actions
 
 #### **3. Text-Likeness Detection**
+
 - The tool automatically excludes files that are not text-like
 - Criteria for exclusion:
   - Low ratio of printable characters in the file content
@@ -47,19 +51,22 @@ The tool operates in two primary modes:
 ### **User Interface**
 
 #### **Interactive Mode**
+
 1. **Initialization**:
    - Shows a progress spinner while scanning files
    - Reports the total number of valid text files found
 
 2. **Group Presentation**:
    - Each group is displayed in a bordered panel showing:
-     ```
-     ╭── Group N (~XX.XX% similar) ──╮
+
+     ```bash
+     ╭── Group N (~XX.XX% similar) ──-╮
      │ File        Size     Modified  │
-     │ path1.txt   252 B   timestamp │
-     │ path2.txt   6.0 KB  timestamp │
+     │ path1.txt   252 B   timestamp  │
+     │ path2.txt   6.0 KB  timestamp  │
      ╰────────────────────────────────╯
      ```
+
    - For groups with 2 files: Shows "~XX.XX% similar"
    - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
 
@@ -82,18 +89,21 @@ The tool operates in two primary modes:
 
 ### **User Flow**
 
-#### **Interactive Mode**
+#### **Interactive Mode Flow**
+
 1. **Initialization**:
    - The tool scans the provided file paths, identifies text-like files, and computes MinHash signatures.
    - Files are grouped based on content similarity.
 
 2. **Group Presentation**:
    - Duplicate groups are presented to the user, e.g.:
-     ```
+
+     ```bash
      Found duplicate groups:
      [1] file1.txt, file2.txt
      [2] file3.txt, file4.txt, file5.txt
      ```
+
    - The user is prompted to act on each group.
 
 3. **Available Actions**:
@@ -107,6 +117,7 @@ The tool operates in two primary modes:
    - Similarities are **not re-computed**; groups are updated based on the existing similarity graph.
 
 #### **Non-Interactive Mode**
+
 1. **Batch Processing**:
    - Groups are formed automatically based on the similarity threshold.
    - Actions are applied based on user-defined criteria:
@@ -125,6 +136,7 @@ The tool operates in two primary modes:
 ### **Key Features**
 
 #### **1. MinHash-Based Similarity**
+
 - Efficiently calculates content similarity for large collections of text documents.
 - Groups duplicates using a **similarity graph**:
   - Nodes represent files.
@@ -140,6 +152,7 @@ The tool operates in two primary modes:
     - Configurable shingle size for different use cases
 
 #### **2. Text-Likeness Detection**
+
 - Files that fail basic text-likeness checks are excluded from processing.
 - Includes:
   - Decoding as UTF-8.
@@ -147,19 +160,23 @@ The tool operates in two primary modes:
   - Optional file extension filters.
 
 #### **3. Dynamic Group Management**
+
 - Groups are updated dynamically as actions are taken (e.g., deleting or moving files).
 - Ensures that changes are immediately reflected in the presented groups.
 
 #### **4. Configurable Threshold**
+
 - Users can specify a similarity threshold (e.g., 0.85) to adjust the sensitivity of duplicate detection.
 
 #### **5. File Retention Criteria**
+
 - In non-interactive mode, users can specify criteria for which file to retain within a group:
   - **Age**: Oldest or newest.
   - **Size**: Smallest or largest.
   - **Priority paths**: Retain files in certain directories.
 
 #### **6. Logging**
+
 - Logs all actions taken, including files excluded from processing and duplicates detected.
 - Log format: human-readable text or structured formats like JSON.
 
@@ -167,17 +184,20 @@ The tool operates in two primary modes:
 
 ### **Command-Line Interface**
 
-#### **Interactive Mode** (default):
+#### **Interactive Mode** (default)
+
 ```bash
 ndetect /path/to/files
 ```
 
-#### **Non-Interactive Mode**:
+#### **Non-Interactive Mode Flow**
+
 ```bash
 ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criteria size --log /output/log.txt
 ```
 
-#### **Additional Options**:
+#### **Additional Options**
+
 - `--threshold [float]`: Set similarity threshold (default: 0.85).
 - `--criteria [size|age|priority]`: Specify retention criteria (default: none).
 - `--holding-dir [path]`: Directory to move duplicates in non-interactive mode.
@@ -190,24 +210,28 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 ### **Minimum Viable Product (MVP) Scope**
 
 #### 1. Project Setup ✅
+
 - Basic project structure with `pyproject.toml` and dependencies
 - Development environment with Nix
 - CI pipeline with linting, type checking, and tests
 - Logging infrastructure
 
 #### 2. Text-Likeness Detection ✅
+
 - UTF-8 decoding validation
 - Printable character ratio checking
 - Configurable file extension filtering
 - Unit tests for text detection
 
 #### 3. CLI Framework ✅
+
 - Argument parsing for paths and options
 - Mode selection (interactive/non-interactive)
 - Configurable thresholds
 - Basic logging output
 
 #### 4. MinHash Implementation ✅
+
 - Document fingerprinting using k-shingles:
   - Text is normalized (lowercase, whitespace normalized)
   - Content is split into overlapping k-shingles (default k=5)
@@ -218,23 +242,29 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
   - Configurable shingle size for different use cases
 
 #### 5. Duplicate Detection
+
 ##### Completed ✅
+
 - Build similarity graph
 - Similarity threshold configuration
 - Basic group formation
 
 ##### In Progress 🚧
+
 - Enhanced group formation using transitive relationships
 - Dynamic group updates during operations
 - Group similarity score calculations
 - Memory-efficient processing for large file sets
 
 #### 6. Interactive Mode
+
 ##### Completed ✅
+
 - Basic group display interface
 - Initial action menu structure
 
 ##### In Progress 🚧
+
 - File deletion implementation
 - Move to holding directory implementation
 - Enhanced group display with file details
@@ -244,6 +274,7 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 - Safe file operation handling
 
 #### 7. Non-Interactive Mode 🚧
+
 - Automated processing logic
 - Retention criteria implementation
 - Batch operations
@@ -252,12 +283,15 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 - Dry-run mode
 
 #### 8. Error Handling
+
 ##### Completed ✅
+
 - Basic validation for file operations
 - Type checking and validation
 - Standard error messages
 
 ##### In Progress 🚧
+
 - Enhanced error recovery mechanisms
 - User-friendly error messages
 - Operation rollback capabilities
@@ -270,6 +304,7 @@ Legend:
 ---
 
 ### **Future Considerations (Post-MVP)**
+
 - Hierarchical grouping for large collections.
 - Undo functionality.
 - Enhanced heuristics for text-likeness detection (e.g., natural language detection).
