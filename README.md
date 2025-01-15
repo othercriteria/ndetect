@@ -196,23 +196,6 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 
 ## Minimum Viable Product (MVP) Scope
 
-### 6. Interactive Mode
-
-#### Completed ✅
-
-- Basic group display interface
-- Action menu structure
-- File deletion implementation
-- Detailed file information view
-- Enhanced group display with file details
-- Progress indication for graph building
-- Group persistence until explicitly handled
-- Safe file operation handling
-
-#### In Progress 🚧
-
-- Move to holding directory implementation
-
 ### 7. Non-Interactive Mode 🚧
 
 - Automated processing logic
