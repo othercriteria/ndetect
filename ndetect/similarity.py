@@ -1,6 +1,6 @@
 """Similarity graph implementation for near-duplicate detection."""
 
-from typing import List
+from typing import List, Dict, Tuple
 from pathlib import Path
 import networkx as nx
 from dataclasses import dataclass
@@ -75,3 +75,14 @@ class SimilarityGraph:
         # Remove only existing nodes
         existing_files = [f for f in files if f in self.graph]
         self.graph.remove_nodes_from(existing_files) 
+    
+    def get_group_similarities(self, group_files: List[Path]) -> Dict[Tuple[Path, Path], float]:
+        """Get pairwise similarities for files in a group."""
+        similarities: Dict[Tuple[Path, Path], float] = {}
+        
+        for i, file1 in enumerate(group_files):
+            for file2 in group_files[i + 1:]:
+                if self.graph.has_edge(file1, file2):
+                    similarities[(file1, file2)] = self.graph.edges[file1, file2]["weight"]
+        
+        return similarities 

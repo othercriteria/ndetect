@@ -151,8 +151,11 @@ def handle_interactive_mode(ui: InteractiveUI, text_files: List[TextFile], thres
                 # TODO: Implement move to holding directory
                 ui.show_error("Move to holding not yet implemented")
             elif action == "i":
-                # TODO: Show detailed file information
-                ui.show_error("Detailed info not yet implemented")
+                # Get pairwise similarities for the group
+                similarities = graph.get_group_similarities(group.files)
+                ui.show_detailed_info(group.files, similarities)
+                # Wait for user to press enter before continuing
+                ui.console.input("\nPress Enter to continue...")
     
     return 0
 

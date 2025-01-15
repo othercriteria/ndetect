@@ -1,12 +1,13 @@
 """Interactive UI components using rich."""
 
-from typing import List
+from typing import List, Dict, Tuple
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.progress import Progress, SpinnerColumn, TextColumn
+from datetime import datetime
 
 class InteractiveUI:
     def __init__(self) -> None:
@@ -103,4 +104,62 @@ class InteractiveUI:
         
     def show_success(self, message: str) -> None:
         """Display a success message."""
-        self.console.print(f"[green]{message}[/green]") 
+        self.console.print(f"[green]{message}[/green]")
+        
+    def show_detailed_info(self, files: List[Path], similarities: Dict[Tuple[Path, Path], float]) -> None:
+        """Display detailed information about files in a group."""
+        # Create a table for file metadata
+        metadata_table = Table(show_header=True, header_style="bold magenta")
+        metadata_table.add_column("File", style="cyan")
+        metadata_table.add_column("Size", justify="right", style="green")
+        metadata_table.add_column("Created", justify="right", style="yellow")
+        metadata_table.add_column("Modified", justify="right", style="yellow")
+        metadata_table.add_column("Permissions", justify="center", style="blue")
+        
+        # Add file metadata rows
+        for file in files:
+            stats = file.stat()
+            metadata_table.add_row(
+                str(file),
+                f"{stats.st_size:,} bytes",
+                datetime.fromtimestamp(stats.st_ctime).strftime("%Y-%m-%d %H:%M"),
+                datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                oct(stats.st_mode)[-3:]  # Last 3 digits of octal permissions
+            )
+        
+        # Create a table for pairwise similarities
+        sim_table = Table(show_header=True, header_style="bold magenta")
+        sim_table.add_column("File 1", style="cyan")
+        sim_table.add_column("File 2", style="cyan")
+        sim_table.add_column("Similarity", justify="right", style="green")
+        
+        # Add similarity rows
+        for (file1, file2), score in similarities.items():
+            sim_table.add_row(
+                str(file1),
+                str(file2),
+                f"{score:.2%}"
+            )
+        
+        # Create a table for file previews
+        preview_table = Table(show_header=True, header_style="bold magenta")
+        preview_table.add_column("File", style="cyan")
+        preview_table.add_column("Preview", style="white")
+        
+        # Add file preview rows (first 5 lines of each file)
+        for file in files:
+            try:
+                with file.open('r', encoding='utf-8') as f:
+                    preview = '\n'.join(f.readlines()[:5])
+                    if len(preview) > 200:  # Truncate long previews
+                        preview = preview[:197] + "..."
+            except Exception as e:
+                preview = f"[red]Error reading file: {e}[/red]"
+            preview_table.add_row(str(file), preview)
+        
+        # Display all tables in panels
+        self.console.print(Panel(metadata_table, title="[bold blue]File Metadata"))
+        self.console.print()
+        self.console.print(Panel(sim_table, title="[bold blue]Similarity Scores"))
+        self.console.print()
+        self.console.print(Panel(preview_table, title="[bold blue]File Previews")) 
