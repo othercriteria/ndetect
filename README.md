@@ -1,13 +1,13 @@
 # **`ndetect`: Near-Duplicate Detection using MinHash**
 
-### **Core Behavior**
+## **Core Behavior**
 
-#### **1. Identify Near-Duplicates**
+### **1. Identify Near-Duplicates**
 
 - The tool identifies near-duplicate text documents based on their **content similarity** using MinHash.
 - **Groups** of duplicates are formed by detecting transitive relationships (e.g., if A is similar to B and B is similar to C, all three form a group).
 
-#### **2. Modes of Operation**
+### **2. Modes of Operation**
 
 The tool operates in two primary modes:
 
@@ -32,7 +32,7 @@ The tool operates in two primary modes:
      - Output directory for duplicates
      - Logging of actions
 
-#### **3. Text-Likeness Detection**
+### **3. Text-Likeness Detection**
 
 - The tool automatically excludes files that are not text-like
 - Criteria for exclusion:
@@ -42,9 +42,9 @@ The tool operates in two primary modes:
 
 ---
 
-### **User Interface**
+## **User Interface**
 
-#### **Interactive Mode**
+### **Interactive Mode**
 
 1. **Initialization**:
    - Shows a progress spinner while scanning files
@@ -84,9 +84,9 @@ The tool operates in two primary modes:
 
 ---
 
-### **User Flow**
+## **User Flow**
 
-#### **Interactive Mode Flow**
+### **Interactive Mode Flow**
 
 1. **Initialization**:
    - The tool scans the provided file paths, identifies text-like files, and computes MinHash signatures.
@@ -113,7 +113,7 @@ The tool operates in two primary modes:
    - After each action, groups are recalculated to account for changes (e.g., removed or moved files).
    - Similarities are **not re-computed**; groups are updated based on the existing similarity graph.
 
-#### **Non-Interactive Mode**
+### **Non-Interactive Mode**
 
 1. **Batch Processing**:
    - Groups are formed automatically based on the similarity threshold.
@@ -130,9 +130,9 @@ The tool operates in two primary modes:
 
 ---
 
-### **Key Features**
+## **Key Features**
 
-#### **1. MinHash-Based Similarity**
+### **1. MinHash-Based Similarity**
 
 - Efficiently calculates content similarity for large collections of text documents.
 - Groups duplicates using a **similarity graph**:
@@ -148,7 +148,7 @@ The tool operates in two primary modes:
     - Configurable number of permutations (default: 128)
     - Configurable shingle size for different use cases
 
-#### **2. Text-Likeness Detection**
+### **2. Text-Likeness Detection**
 
 - Files that fail basic text-likeness checks are excluded from processing.
 - Includes:
@@ -156,44 +156,44 @@ The tool operates in two primary modes:
   - Checking for printable character ratio.
   - Optional file extension filters.
 
-#### **3. Dynamic Group Management**
+### **3. Dynamic Group Management**
 
 - Groups are updated dynamically as actions are taken (e.g., deleting or moving files).
 - Ensures that changes are immediately reflected in the presented groups.
 
-#### **4. Configurable Threshold**
+### **4. Configurable Threshold**
 
 - Users can specify a similarity threshold (e.g., 0.85) to adjust the sensitivity of duplicate detection.
 
-#### **5. File Retention Criteria**
+### **5. File Retention Criteria**
 
 - In non-interactive mode, users can specify criteria for which file to retain within a group:
   - **Age**: Oldest or newest.
   - **Size**: Smallest or largest.
   - **Priority paths**: Retain files in certain directories.
 
-#### **6. Logging**
+### **6. Logging**
 
 - Logs all actions taken, including files excluded from processing and duplicates detected.
 - Log format: human-readable text or structured formats like JSON.
 
 ---
 
-### **Command-Line Interface**
+## **Command-Line Interface**
 
-#### **Interactive Mode** (default)
+### **Interactive Mode** (default)
 
 ```bash
 ndetect /path/to/files
 ```
 
-#### **Non-Interactive Mode Flow**
+### **Non-Interactive Mode Flow**
 
 ```bash
 ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criteria size --log /output/log.txt
 ```
 
-#### **Additional Options**
+### **Additional Options**
 
 - `--threshold [float]`: Set similarity threshold (default: 0.85).
 - `--criteria [size|age|priority]`: Specify retention criteria (default: none).
@@ -204,11 +204,11 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 
 ---
 
-### **Minimum Viable Product (MVP) Scope**
+## **Minimum Viable Product (MVP) Scope**
 
-#### 6. Interactive Mode
+### 6. Interactive Mode
 
-##### Completed ✅
+#### Completed ✅
 
 - Basic group display interface
 - Action menu structure
@@ -219,12 +219,12 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 - Group persistence until explicitly handled
 - Safe file operation handling
 
-##### In Progress 🚧
+#### In Progress 🚧
 
 - Move to holding directory implementation
 - Keyboard shortcuts and navigation
 
-#### 7. Non-Interactive Mode 🚧
+### 7. Non-Interactive Mode 🚧
 
 - Automated processing logic
 - Retention criteria implementation
@@ -233,15 +233,15 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 - Report generation
 - Dry-run mode
 
-#### 8. Error Handling
+### 8. Error Handling
 
-##### Completed ✅
+#### Completed ✅
 
 - Basic validation for file operations
 - Type checking and validation
 - Standard error messages
 
-##### In Progress 🚧
+#### In Progress 🚧
 
 - Enhanced error recovery mechanisms
 - User-friendly error messages
@@ -254,23 +254,23 @@ Legend:
 
 ---
 
-### **Future Considerations (Post-MVP)**
+## **Future Considerations (Post-MVP)**
 
 - Hierarchical grouping for large collections.
 - Undo functionality.
 - Enhanced heuristics for text-likeness detection (e.g., natural language detection).
 - Configurable grouping behavior (e.g., similarity banding).
 
-### Technical Details
+## Technical Details
 
-#### Text Processing
+### Text Processing
 
 - Files are validated for UTF-8 encoding and minimum printable character ratio
 - Text content is normalized (lowercase, whitespace normalized)
 - Content is split into overlapping k-shingles (default k=5)
 - MinHash signatures are generated using configurable permutations (default: 128)
 
-#### Similarity Detection
+### Similarity Detection
 
 - Files are compared using MinHash-based Jaccard similarity
 - Groups are formed using connected components with transitive relationships
@@ -280,7 +280,7 @@ Legend:
   - Batched processing for memory efficiency
   - Dynamic group updates after operations
 
-### Configuration
+## Configuration
 
 The following parameters can be customized:
 
