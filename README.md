@@ -1,10 +1,4 @@
-# **Specification for a CLI Tool: Near-Duplicate Detection using MinHash**
-
----
-
-## **Tool Name**: `ndetect`
-
----
+# **`ndetect`: Near-Duplicate Detection using MinHash**
 
 ### **Core Behavior**
 
@@ -212,50 +206,6 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 
 ### **Minimum Viable Product (MVP) Scope**
 
-#### 1. Project Setup ✅
-
-- Basic project structure with `pyproject.toml` and dependencies
-- Development environment with Nix
-- CI pipeline with linting, type checking, and tests
-- Logging infrastructure
-
-#### 2. Text-Likeness Detection ✅
-
-- UTF-8 decoding validation
-- Printable character ratio checking
-- Configurable file extension filtering
-- Unit tests for text detection
-
-#### 3. CLI Framework ✅
-
-- Argument parsing for paths and options
-- Mode selection (interactive/non-interactive)
-- Configurable thresholds
-- Basic logging output
-
-#### 4. MinHash Implementation ✅
-
-- Document fingerprinting using k-shingles:
-  - Text is normalized (lowercase, whitespace normalized)
-  - Content is split into overlapping k-shingles (default k=5)
-  - Each shingle is hashed and added to MinHash signature
-- Similarity calculation:
-  - Jaccard similarity between MinHash signatures
-  - Configurable number of permutations (default: 128)
-  - Configurable shingle size for different use cases
-
-#### 5. Duplicate Detection ✅
-
-- Build similarity graph with MinHash signatures
-- Configurable similarity threshold
-- Group formation using connected components
-- Enhanced group formation using transitive relationships
-- Group similarity score calculations
-- Dynamic group updates during operations
-- Memory-efficient processing with batched operations
-- Cached MinHash signatures for performance
-- Similarity-based group ordering
-
 #### 6. Interactive Mode
 
 ##### Completed ✅
@@ -310,3 +260,31 @@ Legend:
 - Undo functionality.
 - Enhanced heuristics for text-likeness detection (e.g., natural language detection).
 - Configurable grouping behavior (e.g., similarity banding).
+
+### Technical Details
+
+#### Text Processing
+
+- Files are validated for UTF-8 encoding and minimum printable character ratio
+- Text content is normalized (lowercase, whitespace normalized)
+- Content is split into overlapping k-shingles (default k=5)
+- MinHash signatures are generated using configurable permutations (default: 128)
+
+#### Similarity Detection
+
+- Files are compared using MinHash-based Jaccard similarity
+- Groups are formed using connected components with transitive relationships
+- Groups are presented in order of highest similarity first
+- Performance optimizations:
+  - Cached MinHash signatures
+  - Batched processing for memory efficiency
+  - Dynamic group updates after operations
+
+### Configuration
+
+The following parameters can be customized:
+
+- `--num-perm`: Number of MinHash permutations (default: 128)
+- `--shingle-size`: Size of text shingles (default: 5)
+- `--threshold`: Minimum similarity threshold (default: 0.8)
+- `--min-printable`: Minimum ratio of printable characters (default: 0.8)
