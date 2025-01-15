@@ -200,29 +200,11 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 
 ## Minimum Viable Product (MVP) Scope
 
-### 7. Non-Interactive Mode 🚧
+### Non-Interactive Mode 🚧
 
-- Automated processing logic
-- Retention criteria implementation
-- Batch operations
-- Action logging
-- Report generation
-- Dry-run mode
-
-### 8. Error Handling
-
-#### Completed ✅
-
-- Basic validation for file operations
-- Type checking and validation
-- Standard error messages
-
-#### In Progress 🚧
-
-- Enhanced error recovery mechanisms
 - User-friendly error messages
-- Operation rollback capabilities
-- Detailed error logging
+- Basic structured logging
+- Basic recovery for common errors (permissions, disk space)
 
 Legend:
 ✅ - Complete
@@ -230,10 +212,19 @@ Legend:
 
 ## Future Considerations (Post-MVP)
 
-- Hierarchical grouping for large collections.
-- Undo functionality.
-- Enhanced heuristics for text-likeness detection (e.g., natural language detection).
-- Configurable grouping behavior (e.g., similarity banding).
+### Error Handling & Operations
+
+- Enhanced error recovery mechanisms
+- Operation rollback capabilities
+- Advanced report generation
+- Detailed error logging with analytics
+
+### Feature Enhancements
+
+- Hierarchical grouping for large collections
+- Undo functionality
+- Enhanced heuristics for text-likeness detection (e.g., natural language detection)
+- Configurable grouping behavior (e.g., similarity banding)
 
 ## Technical Details
 
