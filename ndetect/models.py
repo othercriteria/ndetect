@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 from datasketch import MinHash
 
 from ndetect.minhash import compute_signature
@@ -75,17 +75,15 @@ class MoveConfig:
     dry_run: bool = False
 
 @dataclass
-class MoveOperation:
-    """Record of a move operation."""
-    source: Path
-    destination: Path
-    group_id: int
-    timestamp: datetime = field(default_factory=datetime.now)
-    executed: bool = False 
-
-@dataclass
 class PreviewConfig:
     """Configuration for file preview display."""
     max_chars: int = 100
     max_lines: int = 3
     truncation_marker: str = '...' 
+
+@dataclass
+class RetentionConfig:
+    """Configuration for file retention criteria."""
+    strategy: str = "newest"  # newest, oldest, shortest_path, largest, smallest
+    priority_paths: List[str] = field(default_factory=list)
+    priority_first: bool = True  # If True, priority paths override other criteria 

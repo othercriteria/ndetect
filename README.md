@@ -1,5 +1,9 @@
 # `ndetect`: Near-Duplicate Detection using MinHash
 
+![ndetect](./docs/ndetect.webp)
+
+(AI slop logo; disregard the "TM"!)
+
 ## Core Behavior
 
 ### 1. Identify Near-Duplicates
@@ -51,10 +55,10 @@ The tool operates in two primary modes:
 2. **Group Presentation**:
    - Each group is displayed in a bordered panel showing:
 
-     ```bash
+     ```console
      ~94.53% similar
      ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
-     ┃   ┃ File                                  ┃         Size ┃         Modified ┃
+     ┃ # ┃ File                                  ┃         Size ┃         Modified ┃
      ┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
      │ 1 │ ../numpy-2.2.1.dist-info/LICENSE.txt  │ 47,755 bytes │ 2025-01-13 13:57 │
      │ 2 │ ../scipy-1.15.1.dist-info/LICENSE.txt │ 46,845 bytes │ 2025-01-13 13:57 │
@@ -91,10 +95,10 @@ The tool operates in two primary modes:
 2. **Group Presentation**:
    - Duplicate groups are presented to the user, e.g.:
 
-     ```bash
-     Found duplicate groups:
-     [1] file1.txt, file2.txt
-     [2] file3.txt, file4.txt, file5.txt
+     ```console
+     Select files (space-separated numbers, 'all' or 'none'):
+       1. ../numpy-2.2.1.dist-info/LICENSE.txt
+       2. ../scipy-1.15.1.dist-info/LICENSE.txt
      ```
 
    - The user is prompted to act on each group.
@@ -196,29 +200,11 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 
 ## Minimum Viable Product (MVP) Scope
 
-### 7. Non-Interactive Mode 🚧
+### Non-Interactive Mode 🚧
 
-- Automated processing logic
-- Retention criteria implementation
-- Batch operations
-- Action logging
-- Report generation
-- Dry-run mode
-
-### 8. Error Handling
-
-#### Completed ✅
-
-- Basic validation for file operations
-- Type checking and validation
-- Standard error messages
-
-#### In Progress 🚧
-
-- Enhanced error recovery mechanisms
 - User-friendly error messages
-- Operation rollback capabilities
-- Detailed error logging
+- Basic structured logging
+- Basic recovery for common errors (permissions, disk space)
 
 Legend:
 ✅ - Complete
@@ -226,10 +212,19 @@ Legend:
 
 ## Future Considerations (Post-MVP)
 
-- Hierarchical grouping for large collections.
-- Undo functionality.
-- Enhanced heuristics for text-likeness detection (e.g., natural language detection).
-- Configurable grouping behavior (e.g., similarity banding).
+### Error Handling & Operations
+
+- Enhanced error recovery mechanisms
+- Operation rollback capabilities
+- Advanced report generation
+- Detailed error logging with analytics
+
+### Feature Enhancements
+
+- Hierarchical grouping for large collections
+- Undo functionality
+- Enhanced heuristics for text-likeness detection (e.g., natural language detection)
+- Configurable grouping behavior (e.g., similarity banding)
 
 ## Technical Details
 
