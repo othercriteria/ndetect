@@ -64,7 +64,6 @@ class InteractiveUI:
             "d": "Delete duplicates",
             "m": "Move duplicates to holding directory",
             "i": "Show detailed information",
-            "s": "Skip this group",
             "q": "Quit"
         }
         
@@ -74,7 +73,7 @@ class InteractiveUI:
         return Prompt.ask(
             "\nChoose action",
             choices=list(actions.keys()),
-            default="s"
+            default="i"
         )
         
     def select_files(self, files: List[Path], prompt: str) -> List[Path]:

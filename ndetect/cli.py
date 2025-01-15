@@ -155,29 +155,34 @@ def handle_interactive_mode(ui: InteractiveUI, text_files: List[TextFile], thres
             graph.add_files(batch)
             progress.advance(task, len(batch))
     
-    # Rest of the function remains the same
     while True:
-        groups = graph.get_groups()
+        groups = graph.get_groups()  # Now returns groups sorted by similarity
         if not groups:
             ui.show_success("No more duplicate groups found.")
             return 0
-            
-        for group in groups:
+        
+        # Work with the highest similarity group
+        group = groups[0]
+        while True:
             ui.display_group(group.id, group.files, group.similarity)
             action = ui.prompt_action()
             
             if action == "q":
                 return 0
-            elif action == "s":
-                continue
             elif action == "k":
-                continue  # Skip to next group
+                # Remove all edges in this group to prevent it from appearing again
+                graph.remove_group(group.files)
+                break
             elif action == "d":
                 files = ui.select_files(group.files, "Select files to delete")
                 if files and ui.confirm_action("delete", files):
                     for file in files:
                         file.unlink()
                     graph.remove_files(files)
+                    # Check if we need to move to next group
+                    groups = graph.get_groups()
+                    if not groups or groups[0].files != group.files:
+                        break
             elif action == "m":
                 # TODO: Implement move to holding directory
                 ui.show_error("Move to holding not yet implemented")
@@ -185,7 +190,7 @@ def handle_interactive_mode(ui: InteractiveUI, text_files: List[TextFile], thres
                 # Get pairwise similarities for the group
                 similarities = graph.get_group_similarities(group.files)
                 ui.show_detailed_info(group.files, similarities)
-                # Wait for user to press enter before continuing
+                # Wait for user to press enter before continuing with same group
                 ui.console.input("\nPress Enter to continue...")
     
     return 0

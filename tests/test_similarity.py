@@ -154,3 +154,43 @@ def test_similarity_graph_batch_size(tmp_path: Path) -> None:
     groups2 = graph2.get_groups()
     assert len(groups1) == len(groups2)
     assert all(g1.files == g2.files for g1, g2 in zip(groups1, groups2)) 
+
+def test_similarity_graph_keep_group(tmp_path: Path) -> None:
+    graph = SimilarityGraph(threshold=0.8)
+    
+    # Create two groups of similar files
+    file1 = create_test_file(tmp_path, "test1.txt", "hello world")
+    file2 = create_test_file(tmp_path, "test2.txt", "hello world")
+    file3 = create_test_file(tmp_path, "test3.txt", "different content")
+    file4 = create_test_file(tmp_path, "test4.txt", "different content")
+    
+    graph.add_files([file1, file2, file3, file4])
+    initial_groups = graph.get_groups()
+    assert len(initial_groups) == 2
+    
+    # Keep one group
+    graph.remove_group(initial_groups[0].files)
+    updated_groups = graph.get_groups()
+    assert len(updated_groups) == 1
+    # Files from kept group should not appear in any remaining groups
+    kept_files = set(initial_groups[0].files)
+    assert not any(f in kept_files for f in updated_groups[0].files) 
+
+def test_similarity_graph_sorting(tmp_path: Path) -> None:
+    """Test that groups are returned in descending order of similarity."""
+    # Moderate threshold to ensure groups are formed but don't collapse to a single group
+    graph = SimilarityGraph(threshold=0.5)
+    
+    # Create groups with different similarities
+    file1 = create_test_file(tmp_path, "test1.txt", "hello world")
+    file2 = create_test_file(tmp_path, "test2.txt", "hello world")  # identical
+    file3 = create_test_file(tmp_path, "test3.txt", "hello there")  # similar
+    file4 = create_test_file(tmp_path, "test4.txt", "hello there")  # similar
+    
+    graph.add_files([file1, file2, file3, file4])
+    groups = graph.get_groups()
+    
+    assert len(groups) > 1
+    # Verify descending order
+    for i in range(len(groups) - 1):
+        assert groups[i].similarity >= groups[i + 1].similarity 

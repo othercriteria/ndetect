@@ -71,19 +71,20 @@ The tool operates in two primary modes:
    - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
 
 3. **Available Actions**:
-   - **[k] Keep all**: No changes are made to this group
+   - **[k] Keep all**: No changes are made to this group, and it won't appear again
    - **[d] Delete duplicates**: Select files to delete
-   - **[m] Move duplicates**: Select files to move
-   - **[i] Show details**: Display similarity details
-   - **[s] Skip group**: Move to next group
+   - **[m] Move duplicates**: Select files to move (not yet implemented)
+   - **[i] Show details**: Display detailed information including:
+     - File metadata (size, timestamps, permissions)
+     - Pairwise similarity scores
+     - Content previews
    - **[q] Quit**: Exit the program
 
-4. **File Selection**:
-   - When deleting or moving files:
-     - Files are numbered for selection
-     - Support for selecting multiple files
-     - Options for 'all' or 'none'
-     - Confirmation before actions
+4. **Group Management**:
+   - Groups are presented in order of highest similarity first
+   - Each group remains active until explicitly handled (keep, delete, or move)
+   - After any file operation, groups are automatically recalculated
+   - Detailed information can be viewed multiple times while working with a group
 
 ---
 
@@ -241,37 +242,35 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
   - Configurable number of permutations (default: 128)
   - Configurable shingle size for different use cases
 
-#### 5. Duplicate Detection
+#### 5. Duplicate Detection ✅
 
-##### Completed ✅
-
-- Build similarity graph
-- Similarity threshold configuration
-- Basic group formation
+- Build similarity graph with MinHash signatures
+- Configurable similarity threshold
+- Group formation using connected components
 - Enhanced group formation using transitive relationships
 - Group similarity score calculations
 - Dynamic group updates during operations
-
-##### In Progress 🚧
-
-- Memory-efficient processing for large file sets
+- Memory-efficient processing with batched operations
+- Cached MinHash signatures for performance
+- Similarity-based group ordering
 
 #### 6. Interactive Mode
 
 ##### Completed ✅
 
 - Basic group display interface
-- Initial action menu structure
+- Action menu structure
 - File deletion implementation
 - Detailed file information view
 - Enhanced group display with file details
+- Progress indication for graph building
+- Group persistence until explicitly handled
+- Safe file operation handling
 
 ##### In Progress 🚧
 
 - Move to holding directory implementation
-- Progress indication for long operations
 - Keyboard shortcuts and navigation
-- Safe file operation handling
 
 #### 7. Non-Interactive Mode 🚧
 

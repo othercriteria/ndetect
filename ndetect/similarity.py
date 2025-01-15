@@ -68,7 +68,7 @@ class SimilarityGraph:
                         self.graph.add_edge(file.path, other.path, weight=sim_score)
     
     def get_groups(self) -> List[DuplicateGroup]:
-        """Get groups of similar files using connected components."""
+        """Get groups of similar files using connected components, sorted by similarity."""
         groups: List[DuplicateGroup] = []
         
         for i, component in enumerate(nx.connected_components(self.graph), 1):
@@ -84,7 +84,8 @@ class SimilarityGraph:
                 avg_similarity = sum(similarities) / len(similarities)
                 groups.append(DuplicateGroup(i, files, avg_similarity))
         
-        return groups
+        # Sort groups by similarity in descending order
+        return sorted(groups, key=lambda g: g.similarity, reverse=True)
     
     def remove_files(self, files: List[Path]) -> None:
         """Remove files from the graph."""
@@ -108,3 +109,14 @@ class SimilarityGraph:
                     similarities[(file1, file2)] = self.graph.edges[file1, file2]["weight"]
         
         return similarities 
+    
+    def remove_group(self, files: List[Path]) -> None:
+        """Remove all edges between files in a group, effectively dissolving it."""
+        if not files:
+            return
+        
+        # Remove edges between all files in the group
+        for i, file1 in enumerate(files):
+            for file2 in files[i + 1:]:
+                if self.graph.has_edge(file1, file2):
+                    self.graph.remove_edge(file1, file2) 
