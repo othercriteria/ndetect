@@ -69,9 +69,9 @@ class InteractiveUI:
             "q": "Quit"
         }
         
-        # Explicitly set style for all action descriptions
+        # Explicitly set style for all action descriptions and disable markup
         for key, desc in actions.items():
-            self.console.print(f"  [{key}] {desc}", style="default")
+            self.console.print(f"  [{key}] {desc}", style="default", markup=False)
             
         return Prompt.ask(
             "\nChoose action",
