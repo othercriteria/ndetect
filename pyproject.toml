@@ -50,4 +50,14 @@ dev = [
     "datasketch>=1.5.0",
     "numpy>=1.24.0",
     "types-networkx>=3.2.0",
-] 
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py37']
+include = '\.pyi?$'
+extend-exclude = '''
+# A regex preceded with ^/ will apply only to files and directories
+# in the root of the project.
+^/foo.py  # exclude a file named foo.py in the root of the project
+''' 

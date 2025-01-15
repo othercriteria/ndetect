@@ -26,6 +26,8 @@
           mypy
           types-setuptools
           black
+          flake8
+          isort
         ]);
       in
       {
@@ -37,6 +39,7 @@
             stdenv.cc.cc.lib
             zlib
             glib
+            pre-commit
           ];
 
           nativeBuildInputs = with pkgs; [
@@ -53,6 +56,9 @@
             
             # Install package in development mode
             pip install -e ".[dev]"
+            
+            # Initialize pre-commit hooks
+            pre-commit install
             
             # Set PYTHONPATH
             export PYTHONPATH=$PYTHONPATH:$(pwd)
