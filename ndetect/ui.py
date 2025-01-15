@@ -69,8 +69,9 @@ class InteractiveUI:
             "q": "Quit"
         }
         
+        # Explicitly set style for all action descriptions
         for key, desc in actions.items():
-            self.console.print(f"  [{key}] {desc}")
+            self.console.print(f"  [{key}] {desc}", style="default")
             
         return Prompt.ask(
             "\nChoose action",

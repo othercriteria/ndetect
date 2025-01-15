@@ -32,8 +32,11 @@
         devShell = pkgs.mkShell {
           name = "ndetect-dev-shell";
           
-          buildInputs = [
+          buildInputs = with pkgs; [
             pythonEnv
+            stdenv.cc.cc.lib
+            zlib
+            glib
           ];
 
           nativeBuildInputs = with pkgs; [
@@ -53,6 +56,9 @@
             
             # Set PYTHONPATH
             export PYTHONPATH=$PYTHONPATH:$(pwd)
+            
+            # Ensure library path includes stdenv cc lib
+            export LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH
             
             echo "Development environment for ndetect is ready."
           '';
