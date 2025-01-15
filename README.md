@@ -248,12 +248,12 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 - Build similarity graph
 - Similarity threshold configuration
 - Basic group formation
+- Enhanced group formation using transitive relationships
+- Group similarity score calculations
+- Dynamic group updates during operations
 
 ##### In Progress 🚧
 
-- Enhanced group formation using transitive relationships
-- Dynamic group updates during operations
-- Group similarity score calculations
 - Memory-efficient processing for large file sets
 
 #### 6. Interactive Mode
@@ -262,14 +262,14 @@ ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criter
 
 - Basic group display interface
 - Initial action menu structure
+- File deletion implementation
+- Detailed file information view
+- Enhanced group display with file details
 
 ##### In Progress 🚧
 
-- File deletion implementation
 - Move to holding directory implementation
-- Enhanced group display with file details
 - Progress indication for long operations
-- Detailed file information view
 - Keyboard shortcuts and navigation
 - Safe file operation handling
 
