@@ -41,20 +41,12 @@ repos:
           - flake8-comprehensions
           - flake8-simplify
 
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.14.1
+  - repo: local
     hooks:
-      - id: mypy
-        stages: [pre-commit]
-        additional_dependencies:
-          - typing-extensions
-          - types-setuptools
-          - networkx>=3.2.0
-          - numpy>=1.24.0
-          - rich>=13.0.0
-          - datasketch>=1.5.0
-        args: [
-          --strict,
-          --ignore-missing-imports,
-          --disable-error-code=misc
-        ]
+      - id: dmypy
+        name: dmypy
+        entry: dmypy check
+        language: system
+        types: [python]
+        require_serial: true
+        verbose: true

@@ -16,6 +16,8 @@
    nix develop
    ```
 
+   This will automatically start the mypy daemon for faster type checking.
+
 ## Code Quality Standards
 
 We use several tools to maintain code quality:
@@ -23,14 +25,33 @@ We use several tools to maintain code quality:
 - **Black**: Code formatting
 - **Flake8**: Style guide enforcement
 - **isort**: Import sorting
-- **mypy**: Static type checking
+- **mypy/dmypy**: Static type checking with daemon mode for performance
 - **pre-commit**: Automated checks before commits
 
 These tools are automatically installed in the development environment and configured via:
 
-- `pyproject.toml`: Black and isort configuration
+- `pyproject.toml`: Black, isort, and mypy configuration
 - `.flake8`: Flake8 configuration
 - `.pre-commit-config.yaml`: Pre-commit hooks configuration
+
+### Type Checking with dmypy
+
+The mypy daemon (dmypy) is used for faster type checking:
+
+- Status check: `dmypy status`
+- Manual check: `dmypy check .`
+- Stop daemon: `dmypy stop`
+
+Helper scripts are provided:
+
+- `./scripts/dev.sh`: Start daemon if needed and run type checking
+- `./scripts/cleanup.sh`: Stop the daemon
+
+The daemon is automatically:
+
+- Started when entering the nix shell
+- Used by pre-commit hooks
+- Configured via settings in pyproject.toml
 
 ## Running Tests
 
@@ -47,7 +68,7 @@ pytest
    black .
    flake8
    isort .
-   mypy .
+   dmypy check .  # Faster than running mypy directly
    ```
 
 3. Commit your changes and ensure pre-commit hooks pass

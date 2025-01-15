@@ -28,6 +28,8 @@
           black
           flake8
           isort
+          # Add mypy type stubs
+          typing-extensions
         ]);
       in
       {
@@ -59,7 +61,13 @@
 
             # Initialize pre-commit hooks
             pre-commit install
-            pre-commit autoupdate
+
+            # Start mypy daemon
+            dmypy start -- --strict --ignore-missing-imports \
+              --python-version=3.12 \
+              --cache-dir=.mypy_cache \
+              --no-namespace-packages \
+              --exclude='^(build|dist|\.git|\.mypy_cache|\.pytest_cache|\.venv)/'
 
             # Set PYTHONPATH
             export PYTHONPATH=$PYTHONPATH:$(pwd)
@@ -68,6 +76,7 @@
             export LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH
 
             echo "Development environment for ndetect is ready."
+            echo "Use 'dmypy check .' to run type checking"
           '';
         };
       });
