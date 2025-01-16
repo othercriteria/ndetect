@@ -9,7 +9,12 @@ from typing import List, Optional
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
-from ndetect.exceptions import handle_error
+from ndetect.exceptions import (
+    DiskSpaceError,
+    FileOperationError,
+    PermissionError,
+    handle_error,
+)
 from ndetect.logging import StructuredLogger, setup_logging
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
@@ -219,7 +224,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     except KeyboardInterrupt:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         return 130
+    except FileOperationError as e:
+        # Handle file operation errors (read/write/move/delete)
+        return handle_error(console, e)
+    except PermissionError as e:
+        # Handle permission denied errors
+        return handle_error(console, e)
+    except DiskSpaceError as e:
+        # Handle insufficient disk space errors
+        return handle_error(console, e)
     except Exception as e:
+        # Handle any other unexpected errors
         return handle_error(console, e)
 
 
@@ -269,8 +284,6 @@ def process_group(
                 return action
             case Action.QUIT:
                 return action
-
-    return Action.KEEP
 
 
 def handle_interactive_mode(
