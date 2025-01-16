@@ -236,18 +236,25 @@ class InteractiveUI:
 
         self.console.print(Panel(table, title="Move Preview", border_style="blue"))
 
-    def show_similarities(
+    def format_similarity_table(
         self, group_files: List[Path], similarities: Dict[Tuple[Path, Path], float]
-    ) -> None:
-        """Show pairwise similarities between files in a group."""
-        table = Table(show_header=True, header_style="bold magenta")
-        table.add_column("File 1", style="cyan")
-        table.add_column("File 2", style="cyan")
-        table.add_column("Similarity", justify="right", style="green")
+    ) -> Table:
+        """Create a table for similarities display."""
+        table = Table(show_header=True, header_style="bold magenta", width=200)
+        table.add_column("File 1", style="cyan", width=80)
+        table.add_column("File 2", style="cyan", width=80)
+        table.add_column("Similarity", justify="right", style="green", width=12)
 
         for (file1, file2), sim in similarities.items():
             table.add_row(str(file1), str(file2), f"{sim:.2%}")
 
+        return table
+
+    def show_similarities(
+        self, group_files: List[Path], similarities: Dict[Tuple[Path, Path], float]
+    ) -> None:
+        """Show pairwise similarities between files in a group."""
+        table = self.format_similarity_table(group_files, similarities)
         self.console.print(
             Panel(table, title="Pairwise Similarities", border_style="blue")
         )
