@@ -10,7 +10,9 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
+from rich.text import Text
 
+from ndetect.exceptions import DiskSpaceError, FileOperationError, PermissionError
 from ndetect.logging import setup_logging
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
 from ndetect.operations import MoveOperation, prepare_moves, select_keeper
@@ -158,10 +160,45 @@ class InteractiveUI:
         self.logger.info_with_fields(message, operation="ui", type="success")
         self.console.print(f"[green]{message}[/green]")
 
-    def show_error(self, message: str) -> None:
-        """Show an error message."""
-        self.logger.error_with_fields(message, operation="ui", type="error")
-        self.console.print(f"[red]Error: {message}[/red]")
+    def show_error(self, message: str, details: Optional[str] = None) -> None:
+        """Display error message with optional details."""
+        error_text = Text()
+        error_text.append("Error: ", style="bold red")
+        error_text.append(message)
+
+        if details:
+            error_text.append("\n\nDetails: ", style="bold")
+            error_text.append(details, style="italic")
+
+        self.console.print(Panel(error_text, border_style="red"))
+
+    def handle_file_operation_error(
+        self, error: FileOperationError, operation: str
+    ) -> None:
+        """Handle file operation related errors with specific guidance."""
+        if isinstance(error, DiskSpaceError):
+            title = "Insufficient disk space"
+            guidance = (
+                f"Required: {error.required_bytes // 1024 / 1024:.1f} MB, "
+                f"Available: {error.available_bytes // 1024 / 1024:.1f} MB"
+            )
+        elif isinstance(error, PermissionError):
+            title = "Permission denied"
+            guidance = (
+                "Please ensure you have the necessary permissions to access the file."
+            )
+        else:
+            title = f"Error during {operation}"
+            guidance = f"{error.operation} failed for {error.path}: {str(error)}"
+
+        self.show_error(title, guidance)
+        self.logger.error_with_fields(
+            f"Operation failed: {operation}",
+            error_type=type(error).__name__,
+            details=str(error),
+            operation=operation,
+            path=error.path,
+        )
 
     def show_help(self) -> None:
         """Show help information."""
@@ -178,33 +215,56 @@ class InteractiveUI:
 
     def show_preview(self, files: List[Path]) -> None:
         """Show preview of file contents."""
-        self.logger.info_with_fields(
-            "Showing file preview",
-            operation="preview",
-            files=[str(f) for f in files],
-            max_chars=self.preview_config.max_chars,
-            max_lines=self.preview_config.max_lines,
-        )
+        if not files:
+            self.console.print("No files to preview")
+            return
 
         for file in files:
             try:
-                content = format_preview_text(
-                    text=file.read_text(),
+                if not file.exists():
+                    raise FileOperationError("File not found", str(file), "preview")
+
+                if not file.is_file():
+                    raise FileOperationError("Not a regular file", str(file), "preview")
+
+                try:
+                    content = file.read_text(errors="replace")
+                except Exception as e:
+                    raise FileOperationError(
+                        f"Failed to read file: {e}", str(file), "preview"
+                    ) from e
+
+                preview = format_preview_text(
+                    text=content,
                     max_lines=self.preview_config.max_lines,
                     max_chars=self.preview_config.max_chars,
                     truncation_marker=self.preview_config.truncation_marker,
                 )
 
-                self.console.print(Panel(content, title=str(file), border_style="blue"))
+                self.console.print(
+                    Panel(
+                        preview,
+                        title=f"[cyan]{file}[/cyan]",
+                        subtitle=f"Size: {file.stat().st_size:,} bytes",
+                        border_style="blue",
+                    )
+                )
 
+            except FileOperationError as e:
+                self.handle_file_operation_error(e, "preview")
+            except UnicodeDecodeError:
+                self.show_error(
+                    f"Cannot preview {file}",
+                    "File appears to be binary or uses an unsupported encoding",
+                )
             except Exception as e:
                 self.logger.error_with_fields(
-                    "Failed to preview file",
+                    "Unexpected error during preview",
                     operation="preview",
                     file=str(file),
                     error=str(e),
                 )
-                self.show_error(f"Could not preview {file}: {e}")
+                self.show_error("Preview failed", f"An unexpected error occurred: {e}")
 
     def create_moves(self, files: List[Path], *, group_id: int) -> List[MoveOperation]:
         """Create move operations for selected files."""
