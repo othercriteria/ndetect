@@ -14,7 +14,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from ndetect.logging import setup_logging
 from ndetect.models import MoveConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
-from ndetect.similarity import SimilarityGraph
+from ndetect.similarity import Group, SimilarityGraph
 from ndetect.text_detection import scan_paths
 from ndetect.ui import InteractiveUI
 
@@ -201,11 +201,51 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
 
 
+def build_similarity_graph(
+    text_files: List[TextFile], threshold: float, progress: Progress
+) -> SimilarityGraph:
+    """Build similarity graph with progress display."""
+    task = progress.add_task("Building similarity graph...", total=len(text_files))
+    graph = SimilarityGraph(threshold=threshold)
+
+    batch_size = 1000
+    for i in range(0, len(text_files), batch_size):
+        batch = text_files[i : (i + batch_size)]
+        graph.add_files(batch)
+        progress.advance(task, len(batch))
+
+    return graph
+
+
+def process_group(
+    ui: InteractiveUI, graph: SimilarityGraph, group: Group
+) -> Optional[str]:
+    """Process a single group of similar files. Returns action if it's a quit command."""
+    while True:
+        ui.display_group(group.id, group.files, group.similarity)
+        action = ui.prompt_action()
+
+        if action in ("q", "k"):
+            return action
+
+        if action == "p":
+            ui.show_preview(group.files)
+        elif action == "d":
+            ui.show_diff(group.files)
+        elif action == "m":
+            moves = ui.create_moves(group.files)
+            if moves:
+                ui.pending_moves.extend(moves)
+                graph.remove_files([m.source for m in moves])
+                return None
+        elif action == "s":
+            return None
+
+
 def handle_interactive_mode(
     ui: InteractiveUI, text_files: List[TextFile], threshold: float
 ) -> int:
     """Handle interactive mode with rich UI."""
-    # Build similarity graph with progress display
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -213,14 +253,7 @@ def handle_interactive_mode(
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
         console=ui.console,
     ) as progress:
-        task = progress.add_task("Building similarity graph...", total=len(text_files))
-
-        graph = SimilarityGraph(threshold=threshold)
-        batch_size = 1000
-        for i in range(0, len(text_files), batch_size):
-            batch = text_files[i : (i + batch_size)]
-            graph.add_files(batch)
-            progress.advance(task, len(batch))
+        graph = build_similarity_graph(text_files, threshold, progress)
 
     while True:
         groups = graph.get_groups()
@@ -230,51 +263,11 @@ def handle_interactive_mode(
             ui.show_success("No more duplicate groups found.")
             return 0
 
-        group = groups[0]
-        while True:
-            ui.display_group(group.id, group.files, group.similarity)
-            action = ui.prompt_action()
-
-            if action == "q":
-                return 0
-            elif action == "k":
-                # Remove all edges in this group to prevent it from appearing again
-                graph.remove_group(group.files)
-                break
-            elif action == "d":
-                files = ui.select_files(group.files, "Select files to delete")
-                if files and ui.confirm_action("delete", files):
-                    for file in files:
-                        file.unlink()
-                    graph.remove_files(files)
-                    # Check if we need to move to next group
-                    groups = graph.get_groups()
-                    if not groups or groups[0].files != group.files:
-                        break
-            elif action == "m":
-                files = ui.select_files(group.files, "Select files to move")
-                if files:
-                    moves = prepare_moves(
-                        files,
-                        ui.move_config.holding_dir,
-                        preserve_structure=ui.move_config.preserve_structure,
-                        group_id=group.id,
-                    )
-                    ui.display_move_preview(moves)
-                    if ui.confirm_action("move", files):
-                        if not ui.move_config.dry_run:
-                            execute_moves(moves)
-                        graph.remove_files(files)
-                        ui.pending_moves.extend(moves)
-                        groups = graph.get_groups()
-                        if not groups or groups[0].files != group.files:
-                            break
-            elif action == "i":
-                # Get pairwise similarities for the group
-                similarities = graph.get_group_similarities(group.files)
-                ui.show_detailed_info(group.files, similarities)
-                # Wait for user to press enter before continuing with same group
-                ui.console.input("\nPress Enter to continue...")
+        action = process_group(ui, graph, groups[0])
+        if action == "q":
+            return 0
+        elif action == "k":
+            graph.remove_group(groups[0].files)
 
 
 def handle_non_interactive_mode(

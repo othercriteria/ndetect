@@ -147,25 +147,28 @@ def test_similarity_graph_cache(tmp_path: Path) -> None:
     assert file2.path in graph._signature_cache
 
 
-def test_similarity_graph_batch_size(tmp_path: Path) -> None:
-    """Test that batching doesn't affect results."""
-    graph1 = SimilarityGraph(threshold=0.8)
-    graph2 = SimilarityGraph(threshold=0.8)
+def test_similarity_graph_batch_processing(tmp_path: Path) -> None:
+    """Test processing files in batches."""
+    graph = SimilarityGraph(threshold=0.8)
 
-    # Create several similar files
-    files = [
-        create_test_file(tmp_path, f"test{i}.txt", "hello world") for i in range(5)
-    ]
+    # Create test files
+    files = []
+    for i in range(4):
+        path = tmp_path / f"test{i}.txt"
+        path.write_text("hello world")
+        text_file = TextFile.from_path(path, compute_minhash=True)
+        files.append(text_file)
 
-    # Add files with different batch sizes
-    graph1.add_files(files, batch_size=2)
-    graph2.add_files(files, batch_size=3)
+    # Process files in two batches
+    first_batch = files[:2]
+    second_batch = files[2:]
 
-    # Results should be identical
-    groups1 = graph1.get_groups()
-    groups2 = graph2.get_groups()
-    assert len(groups1) == len(groups2)
-    assert all(g1.files == g2.files for g1, g2 in zip(groups1, groups2, strict=False))
+    graph.add_files(first_batch)
+    assert len(graph.get_groups()) == 1  # First group formed
+
+    graph.add_files(second_batch)
+    assert len(graph.get_groups()) == 1  # All files in one group
+    assert len(graph.get_groups()[0].files) == 4  # All files included
 
 
 def test_similarity_graph_keep_group(tmp_path: Path) -> None:

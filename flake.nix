@@ -25,9 +25,6 @@
           ruff
           mypy
           types-setuptools
-          black
-          flake8
-          isort
           # Add mypy type stubs
           typing-extensions
         ]);

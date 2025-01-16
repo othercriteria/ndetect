@@ -22,16 +22,13 @@
 
 We use several tools to maintain code quality:
 
-- **Black**: Code formatting
-- **Flake8**: Style guide enforcement
-- **isort**: Import sorting
+- **ruff**: Code formatting, linting, and import sorting
 - **mypy/dmypy**: Static type checking with daemon mode for performance
 - **pre-commit**: Automated checks before commits
 
 These tools are automatically installed in the development environment and configured via:
 
-- `pyproject.toml`: Black, isort, and mypy configuration
-- `.flake8`: Flake8 configuration
+- `pyproject.toml`: ruff and mypy configuration
 - `.pre-commit-config.yaml`: Pre-commit hooks configuration
 
 ### Type Checking with dmypy

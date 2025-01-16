@@ -6,12 +6,13 @@ install:
 test:
 	pytest
 
+typecheck:
+	dmypy check .
+
 lint:
 	ruff check .
-	mypy .
 
 format:
-	black .
 	ruff check --fix .
 
 clean:

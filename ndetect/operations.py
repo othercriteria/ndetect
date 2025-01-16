@@ -24,6 +24,7 @@ class MoveOperation:
     executed: bool = False
 
 
+# ruff: noqa: C901
 def select_keeper(
     files: List[Path], config: RetentionConfig, base_dir: Optional[Path] = None
 ) -> Path:
@@ -31,26 +32,29 @@ def select_keeper(
     if not files:
         raise ValueError("No files provided")
 
-    # Priority paths take precedence if configured
-    if config.priority_first and config.priority_paths:
+    # Handle priority paths first if configured
+    if config.priority_paths and config.priority_first:
         for pattern in config.priority_paths:
             for file in files:
                 if file.match(pattern):
                     return file
 
     # Apply the selected strategy
-    if config.strategy == "newest":
-        return max(files, key=lambda p: p.stat().st_mtime)
-    elif config.strategy == "oldest":
-        return min(files, key=lambda p: p.stat().st_mtime)
-    elif config.strategy == "shortest_path":
-        return min(files, key=lambda p: len(str(p)))
-    elif config.strategy == "largest":
-        return max(files, key=lambda p: p.stat().st_size)
-    elif config.strategy == "smallest":
-        return min(files, key=lambda p: p.stat().st_size)
-    else:
-        raise ValueError(f"Unknown retention strategy: {config.strategy}")
+    match config.strategy:
+        case "newest":
+            return max(files, key=lambda p: p.stat().st_mtime)
+        case "oldest":
+            return min(files, key=lambda p: p.stat().st_mtime)
+        case "largest":
+            return max(files, key=lambda p: p.stat().st_size)
+        case "smallest":
+            return min(files, key=lambda p: p.stat().st_size)
+        case "shortest_path":
+            if base_dir:
+                return min(files, key=lambda p: len(str(p.relative_to(base_dir))))
+            return min(files, key=lambda p: len(str(p)))
+        case _:
+            raise ValueError(f"Unknown retention strategy: {config.strategy}")
 
 
 def prepare_moves(

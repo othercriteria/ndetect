@@ -12,7 +12,7 @@ from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
-from ndetect.operations import MoveOperation, select_keeper
+from ndetect.operations import MoveOperation, prepare_moves, select_keeper
 
 
 class InteractiveUI:
@@ -90,13 +90,13 @@ class InteractiveUI:
         """Let user select files from a group."""
         self.console.print("\nSelect files (space-separated numbers, 'all' or 'none'):")
 
-        # If retention config exists, mark suggested files
+        # Get suggested keeper if retention config exists
         suggested_keeper = None
         if self.retention_config:
             with suppress(ValueError):
                 suggested_keeper = select_keeper(files, self.retention_config)
 
-        # Display files with suggestion marker
+        # Display files
         for idx, file in enumerate(files, 1):
             marker = "(*)" if file == suggested_keeper else "   "
             self.console.print(f"  {idx}. {marker} {file}", markup=False)
@@ -105,49 +105,42 @@ class InteractiveUI:
             self.console.print(
                 "\n(*) Suggested file to keep based on retention criteria"
             )
-            # Get indices of files to move by default (all except keeper)
             default_indices = [
                 i for i, f in enumerate(files, 1) if f != suggested_keeper
             ]
-            default_str = " ".join(str(i) for i in default_indices)
+            self.console.print(
+                f"\nDefault action: move files {' '.join(map(str, default_indices))}"
+            )
 
-            self.console.print(f"\nDefault action: move files {default_str}")
-            while True:
-                response = (
-                    Prompt.ask(f"{prompt} (press Enter to accept default)")
-                    .strip()
-                    .lower()
+        while True:
+            response = (
+                Prompt.ask(
+                    f"{prompt} (press Enter for default)"
+                    if suggested_keeper
+                    else prompt
                 )
+                .strip()
+                .lower()
+            )
 
-                if response == "":  # Empty response uses default
-                    return [f for f in files if f != suggested_keeper]
-                elif response == "all":
-                    return list(files)
-                elif response == "none":
-                    return []
+            # Handle special cases
+            if response == "" and suggested_keeper:
+                return [f for f in files if f != suggested_keeper]
+            if response == "all":
+                return list(files)
+            if response == "none":
+                return []
 
-                try:
-                    indices = [int(i) - 1 for i in response.split()]
-                    selected = [files[i] for i in indices if 0 <= i < len(files)]
+            # Handle numeric selection
+            try:
+                indices = [int(i) - 1 for i in response.split()]
+                selected = [files[i] for i in indices if 0 <= i < len(files)]
+                if selected:
                     return selected
-                except (ValueError, IndexError):
-                    self.console.print("[red]Invalid selection. Try again.[/red]")
-        else:
-            # Original behavior when no retention suggestion
-            while True:
-                response = Prompt.ask(prompt).strip().lower()
+            except (ValueError, IndexError):
+                pass
 
-                if response == "all":
-                    return list(files)
-                elif response == "none":
-                    return []
-
-                try:
-                    indices = [int(i) - 1 for i in response.split()]
-                    selected = [files[i] for i in indices if 0 <= i < len(files)]
-                    return selected
-                except (ValueError, IndexError):
-                    self.console.print("[red]Invalid selection. Try again.[/red]")
+            self.console.print("[red]Invalid selection. Try again.[/red]")
 
     def confirm_action(self, action: str, files: List[Path]) -> bool:
         """Confirm an action before executing it."""
@@ -260,3 +253,50 @@ class InteractiveUI:
         self.console.print(table)
         if self.move_config.dry_run:
             self.console.print("[yellow]DRY RUN - No files will be moved[/yellow]")
+
+    def show_preview(self, files: List[Path]) -> None:
+        """Show preview of file contents."""
+        for file in files:
+            try:
+                with open(file, "r", encoding="utf-8") as f:
+                    content = f.read(self.preview_config.max_chars)
+                self.console.print(f"\n[bold]{file}[/bold]")
+                self.console.print(content)
+            except Exception as e:
+                self.console.print(f"Error previewing {file}: {e}", style="red")
+
+    def show_diff(self, files: List[Path]) -> None:
+        """Show diff between files."""
+        if len(files) != 2:
+            self.console.print(
+                "Diff is only available for exactly 2 files", style="yellow"
+            )
+            return
+
+        try:
+            from difflib import unified_diff
+
+            with (
+                open(files[0], "r", encoding="utf-8") as f1,
+                open(files[1], "r", encoding="utf-8") as f2,
+            ):
+                diff = unified_diff(
+                    f1.readlines(),
+                    f2.readlines(),
+                    fromfile=str(files[0]),
+                    tofile=str(files[1]),
+                )
+                self.console.print("".join(diff))
+        except Exception as e:
+            self.console.print(f"Error showing diff: {e}", style="red")
+
+    def create_moves(self, files: List[Path]) -> List[MoveOperation]:
+        """Create move operations for the given files."""
+        moves = prepare_moves(
+            files=files,
+            holding_dir=self.move_config.holding_dir,
+            preserve_structure=self.move_config.preserve_structure,
+            group_id=1,  # TODO: Use actual group ID
+            retention_config=self.retention_config,
+        )
+        return moves if moves is not None else []  # Ensure we always return a list
