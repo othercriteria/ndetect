@@ -50,9 +50,10 @@ class FileAnalyzer:
 
     def _is_valid_text_file(self, file_path: Path) -> bool:
         """Check if a file is a valid text file according to configuration."""
+        # Check if extension is allowed
         if (
-            self.config.allowed_extensions is None
-            or file_path.suffix.lower() not in self.config.allowed_extensions
+            self.config.allowed_extensions is not None
+            and file_path.suffix.lower() not in self.config.allowed_extensions
         ):
             return False
 
@@ -65,8 +66,12 @@ class FileAnalyzer:
             except UnicodeDecodeError:
                 return False
 
+            # For empty files, consider them valid text files
+            if not content:
+                return True
+
             printable_chars = sum(1 for c in content if c.isprintable() or c.isspace())
-            ratio = printable_chars / len(content) if content else 0
+            ratio = printable_chars / len(content)
 
             return ratio >= self.config.min_printable_ratio
 
