@@ -13,6 +13,18 @@ class FileAnalyzer:
         """Initialize the analyzer with given configuration."""
         self.config = config
 
+    def _is_valid_symlink(self, file_path: Path) -> bool:
+        """Check if symlink is valid and not circular."""
+        if not file_path.is_symlink():
+            return True
+
+        # Check for circular symlinks
+        try:
+            real_path = file_path.resolve(strict=True)
+            return real_path.exists()
+        except (RuntimeError, OSError):
+            return False
+
     def analyze_file(self, file_path: Path) -> Optional[TextFile]:
         """
         Analyze a file and return a TextFile instance if it's a valid text file.
@@ -23,6 +35,10 @@ class FileAnalyzer:
         Returns:
             TextFile instance if the file is valid, None otherwise
         """
+        # Early validation of symlinks
+        if not self._is_valid_symlink(file_path):
+            return None
+
         if not self._is_valid_text_file(file_path):
             return None
 

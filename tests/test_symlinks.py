@@ -87,3 +87,46 @@ def test_symlink_permissions(tmp_path: Path) -> None:
     finally:
         # Restore permissions for cleanup
         original.chmod(0o644)
+
+
+def test_symlink_validation(tmp_path: Path) -> None:
+    """Test different symlink validation scenarios."""
+    analyzer = FileAnalyzer(FileAnalyzerConfig())
+
+    # Create test files and directories
+    text_file = tmp_path / "source.txt"
+    text_file.write_text("Hello World")
+
+    valid_link = tmp_path / "valid_link.txt"
+    broken_link = tmp_path / "broken_link.txt"
+    nested_link = tmp_path / "nested_link.txt"
+    nested_target = tmp_path / "nested_target.txt"
+
+    # Create valid symlink
+    valid_link.symlink_to(text_file)
+
+    # Create broken symlink
+    broken_link.symlink_to(tmp_path / "nonexistent.txt")
+
+    # Create nested symlinks
+    nested_link.symlink_to(nested_target)
+    nested_target.symlink_to(text_file)
+
+    # Test valid symlink
+    result = analyzer.analyze_file(valid_link)
+    assert result is not None
+    assert result.path == valid_link
+
+    # Test broken symlink
+    result = analyzer.analyze_file(broken_link)
+    assert result is None
+
+    # Test nested symlinks
+    result = analyzer.analyze_file(nested_link)
+    assert result is not None
+    assert result.path == nested_link
+
+    # Test non-symlink file
+    result = analyzer.analyze_file(text_file)
+    assert result is not None
+    assert result.path == text_file
