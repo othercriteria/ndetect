@@ -8,8 +8,10 @@
 
 ### 1. Identify Near-Duplicates
 
-- The tool identifies near-duplicate text documents based on their **content similarity** using MinHash.
-- **Groups** of duplicates are formed by detecting transitive relationships (e.g., if A is similar to B and B is similar to C, all three form a group).
+- The tool identifies near-duplicate text documents based on their **content similarity**
+  using MinHash.
+- **Groups** of duplicates are formed by detecting transitive relationships (e.g., if
+  A is similar to B and B is similar to C, all three form a group).
 
 ### 2. Modes of Operation
 
@@ -28,7 +30,7 @@ The tool operates in two primary modes:
      - Viewing detailed information
      - Skipping groups
      - Quitting the program
-2. **Non-Interactive Mode**:
+1. **Non-Interactive Mode**:
    - Automatically processes files according to specified criteria without user interaction
    - Supports configurable options for:
      - Similarity threshold
@@ -36,7 +38,7 @@ The tool operates in two primary modes:
      - Output directory for duplicates
      - Logging of actions
 
-### **3. Text-Likeness Detection**
+### 3. Text-Likeness Detection
 
 - The tool automatically excludes files that are not text-like
 - Criteria for exclusion:
@@ -52,7 +54,7 @@ The tool operates in two primary modes:
    - Shows a progress spinner while scanning files
    - Reports the total number of valid text files found
 
-2. **Group Presentation**:
+1. **Group Presentation**:
    - Each group is displayed in a bordered panel showing:
 
      ```console
@@ -68,7 +70,7 @@ The tool operates in two primary modes:
    - For groups with 2 files: Shows "~XX.XX% similar"
    - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
 
-3. **Available Actions**:
+1. **Available Actions**:
    - **[k] Keep all**: No changes are made to this group, and it won't appear again
    - **[d] Delete duplicates**: Select files to delete
    - **[m] Move duplicates**: Select files to move (not yet implemented)
@@ -78,7 +80,7 @@ The tool operates in two primary modes:
      - Content previews
    - **[q] Quit**: Exit the program
 
-4. **Group Management**:
+1. **Group Management**:
    - Groups are presented in order of highest similarity first
    - Each group remains active until explicitly handled (keep, delete, or move)
    - After any file operation, groups are automatically recalculated
@@ -89,10 +91,11 @@ The tool operates in two primary modes:
 ### Interactive Mode Flow
 
 1. **Initialization**:
-   - The tool scans the provided file paths, identifies text-like files, and computes MinHash signatures.
+   - The tool scans the provided file paths, identifies text-like files, and computes
+     MinHash signatures.
    - Files are grouped based on content similarity.
 
-2. **Group Presentation**:
+1. **Group Presentation**:
    - Duplicate groups are presented to the user, e.g.:
 
      ```console
@@ -103,15 +106,17 @@ The tool operates in two primary modes:
 
    - The user is prompted to act on each group.
 
-3. **Available Actions**:
+1. **Available Actions**:
    - **[k] Keep all**: No changes are made to this group.
    - **[d] Delete duplicates**: The user selects which files to delete from the group.
    - **[m] Move duplicates to holding**: The user selects files to move to a holding directory.
    - **[i] Show details**: Show similarity scores for the group or detailed file metadata.
 
-4. **Dynamic Updates**:
-   - After each action, groups are recalculated to account for changes (e.g., removed or moved files).
-   - Similarities are **not re-computed**; groups are updated based on the existing similarity graph.
+1. **Dynamic Updates**:
+   - After each action, groups are recalculated to account for changes (e.g., removed
+     or moved files).
+   - Similarities are **not re-computed**; groups are updated based on the existing
+     similarity graph.
 
 ### Non-Interactive Mode
 
@@ -125,7 +130,7 @@ The tool operates in two primary modes:
        - Priority paths (e.g., files in `/important`).
    - Example behavior: For a group of duplicates:
      - Retain the oldest file and move the rest to the purgatory directory.
-2. **Logging**:
+1. **Logging**:
    - Outputs a log file summarizing actions taken (e.g., files moved, deleted, or skipped).
 
 ## Key Features
@@ -161,7 +166,8 @@ The tool operates in two primary modes:
 
 ### 4. Configurable Threshold
 
-- Users can specify a similarity threshold (e.g., 0.85) to adjust the sensitivity of duplicate detection.
+- Users can specify a similarity threshold (e.g., 0.85) to adjust the sensitivity of
+  duplicate detection.
 
 ### 5. File Retention Criteria
 
@@ -177,38 +183,44 @@ The tool operates in two primary modes:
 
 ## Command-Line Interface
 
-### Interactive Mode (default)
+### Basic Usage
 
 ```bash
+# Interactive mode (default)
 ndetect /path/to/files
+
+# Non-interactive mode
+ndetect --mode non-interactive /path/to/files
 ```
 
-### Non-Interactive Mode Flow
+### Common Options
+
+- `--mode [interactive|non-interactive]`: Operation mode (default: interactive)
+- `--threshold [float]`: Minimum similarity threshold (default: 0.85)
+- `--holding-dir [path]`: Directory for moved duplicates (default: ./holding)
+- `--dry-run`: Preview actions without making changes
+
+### Examples
 
 ```bash
-ndetect --mode non-interactive --threshold 0.9 --holding-dir /purgatory --criteria size --log /output/log.txt
+# Find duplicates with higher similarity threshold
+ndetect --threshold 0.95 /path/to/files
+
+# Move duplicates to custom directory
+ndetect --holding-dir /tmp/duplicates /path/to/files
+
+# Non-interactive mode with logging
+ndetect --mode non-interactive \
+        --log /var/log/ndetect.log \
+        --holding-dir /archive \
+        /path/to/files
 ```
 
-### Additional Options
+### Text Processing Options
 
-- `--threshold [float]`: Set similarity threshold (default: 0.85).
-- `--criteria [size|age|priority]`: Specify retention criteria (default: none).
-- `--holding-dir [path]`: Directory to move duplicates in non-interactive mode.
-- `--log [path]`: Path to the log file (default: stdout).
-- `--skip-non-text`: Exclude non-text files.
-- `--dry-run`: Show actions without making changes.
-
-## Minimum Viable Product (MVP) Scope
-
-### Non-Interactive Mode 🚧
-
-- User-friendly error messages
-- Basic structured logging
-- Basic recovery for common errors (permissions, disk space)
-
-Legend:
-✅ - Complete
-🚧 - Not Started/In Progress
+- `--min-printable-ratio [float]`: Minimum ratio of printable characters (default: 0.8)
+- `--num-perm [int]`: Number of MinHash permutations (default: 128)
+- `--shingle-size [int]`: Size of text shingles for comparison (default: 5)
 
 ## Future Considerations (Post-MVP)
 
@@ -256,13 +268,15 @@ The following parameters can be customized:
 
 ## Development
 
-For information about setting up a development environment and contributing to ndetect, please see our [Contributing Guide](CONTRIBUTING.md).
+For information about setting up a development environment and contributing to ndetect,
+please see our [Contributing Guide](CONTRIBUTING.md).
 
 The project uses several code quality tools:
 
-- Black for code formatting
-- Flake8 for style guide enforcement
-- isort for import sorting
-- mypy for static type checking
+- Ruff for code formatting, linting, and import sorting
+- (d)mypy for static type checking
+- markdownlint for markdown linting
+- pre-commit for automated checks before commits
 
-All of these tools are automatically configured in the development environment when using `nix develop`.
+All of these tools are automatically configured in the development environment when
+using `nix develop`.

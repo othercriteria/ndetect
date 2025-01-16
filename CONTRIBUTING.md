@@ -3,14 +3,14 @@
 ## Development Setup
 
 1. Ensure you have Nix installed with flakes enabled
-2. Clone the repository:
+1. Clone the repository:
 
    ```bash
    git clone https://github.com/yourusername/ndetect.git
    cd ndetect
    ```
 
-3. Enter the development shell:
+1. Enter the development shell:
 
    ```bash
    nix develop
@@ -59,7 +59,7 @@ pytest
 ## Before Submitting a Pull Request
 
 1. Ensure all tests pass
-2. Run code quality checks:
+1. Run code quality checks:
 
    ```bash
    black .
@@ -68,4 +68,4 @@ pytest
    dmypy check .  # Faster than running mypy directly
    ```
 
-3. Commit your changes and ensure pre-commit hooks pass
+1. Commit your changes and ensure pre-commit hooks pass

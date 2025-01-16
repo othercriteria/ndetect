@@ -39,6 +39,7 @@
             zlib
             glib
             pre-commit
+            nodePackages.markdownlint-cli
           ];
 
           nativeBuildInputs = with pkgs; [
@@ -76,6 +77,9 @@
 
             echo "Development environment for ndetect is ready."
             echo "Use 'dmypy check .' to run type checking"
+
+            # Ensure markdownlint is available
+            echo "Markdown linting is available via 'markdownlint'"
           '';
         };
       });
