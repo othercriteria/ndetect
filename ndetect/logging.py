@@ -81,7 +81,7 @@ def setup_logging(
         StructuredLogger: Configured logger instance with structured logging capabilities.
     """
     # Create logger
-    logger = logging.getLogger("ndetect")  # type: ignore[assignment]
+    logger = logging.getLogger("ndetect")
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     logger.handlers = []  # Clear any existing handlers
 
