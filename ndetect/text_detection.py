@@ -124,7 +124,8 @@ def scan_paths(
     processed_count = 0
     start_process_time = time.perf_counter()
 
-    with ProcessPoolExecutor(max_workers=workers) as executor:
+    executor = ProcessPoolExecutor(max_workers=workers)
+    try:
         futures = [executor.submit(_analyze_file, (path, config)) for path in all_files]
 
         for future in as_completed(futures):
@@ -150,6 +151,8 @@ def scan_paths(
                     error_type=type(e).__name__,
                     error_message=str(e),
                 )
+    finally:
+        cleanup_resources(executor)
 
     total_time = time.perf_counter() - start_time
     logger.info_with_fields(
@@ -164,3 +167,16 @@ def scan_paths(
     )
 
     return text_files
+
+
+def cleanup_resources(executor: ProcessPoolExecutor) -> None:
+    """Ensure proper cleanup of process pool resources."""
+    try:
+        executor.shutdown(wait=True, cancel_futures=True)
+    except Exception as e:
+        logger.error_with_fields(
+            "Error during resource cleanup",
+            operation="cleanup",
+            error_type=type(e).__name__,
+            error_message=str(e),
+        )

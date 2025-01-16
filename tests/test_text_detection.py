@@ -1,11 +1,17 @@
+import multiprocessing
 import os
+import time
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Any
+from unittest.mock import Mock, create_autospec, patch
 
 import pytest
 
 from ndetect.analysis import FileAnalyzer
-from ndetect.models import FileAnalyzerConfig
-from ndetect.text_detection import scan_paths
+from ndetect.logging import StructuredLogger
+from ndetect.models import FileAnalyzerConfig, TextFile
+from ndetect.text_detection import cleanup_resources, scan_paths
 
 
 def test_file_analyzer_with_invalid_extension(tmp_path: Path) -> None:
@@ -352,3 +358,120 @@ def test_symlink_permissions(tmp_path: Path) -> None:
     finally:
         # Restore permissions for cleanup
         original.chmod(0o644)
+
+
+def test_cleanup_resources_normal_shutdown() -> None:
+    """Test cleanup with normal executor shutdown."""
+    executor = ProcessPoolExecutor(max_workers=1)
+    mock_logger = Mock()
+
+    with patch("ndetect.text_detection.logger", mock_logger):
+        cleanup_resources(executor)
+
+    # Verify no error logs were created
+    mock_logger.error_with_fields.assert_not_called()
+
+
+def test_cleanup_resources_with_error() -> None:
+    """Test cleanup when executor shutdown raises an exception."""
+    executor = ProcessPoolExecutor(max_workers=1)
+    mock_logger = Mock()
+
+    # Mock the shutdown method to raise an exception
+    with patch.object(
+        executor, "shutdown", side_effect=RuntimeError("Shutdown failed")
+    ):
+        with patch("ndetect.text_detection.logger", mock_logger):
+            cleanup_resources(executor)
+
+    # Verify error was logged
+    mock_logger.error_with_fields.assert_called_once()
+    call_args = mock_logger.error_with_fields.call_args[1]
+    assert call_args["operation"] == "cleanup"
+    assert call_args["error_type"] == "RuntimeError"
+    assert "Shutdown failed" in call_args["error_message"]
+
+
+def failing_analyze_for_test(*args: Any) -> None:
+    """Test function that always raises an error."""
+    raise RuntimeError("Processing failed")
+
+
+def test_scan_paths_cleanup_after_exception(tmp_path: Path) -> None:
+    """Test that cleanup occurs even when processing raises an exception."""
+    # Create test files to trigger parallel processing
+    for i in range(20):
+        test_file = tmp_path / f"test{i}.txt"
+        test_file.write_text("test content")
+
+    mock_logger = create_autospec(StructuredLogger)
+    cleanup_called = False
+
+    def mock_cleanup(*args: Any) -> None:
+        nonlocal cleanup_called
+        cleanup_called = True
+
+    with patch("ndetect.text_detection.get_logger", return_value=mock_logger):
+        with patch("ndetect.text_detection._analyze_file", failing_analyze_for_test):
+            with patch("ndetect.text_detection.cleanup_resources", mock_cleanup):
+                result = scan_paths([str(tmp_path)])
+
+                assert cleanup_called
+                assert mock_logger.error_with_fields.called
+                assert len(result) == 0
+
+
+def test_scan_paths_sequential_processing(tmp_path: Path) -> None:
+    """Test sequential processing (less than 10 files)."""
+    for i in range(5):
+        test_file = tmp_path / f"test{i}.txt"
+        test_file.write_text(f"test content {i}")
+
+    mock_logger = Mock()
+    cleanup_called = False
+
+    def mock_cleanup(*args: Any) -> None:
+        nonlocal cleanup_called
+        cleanup_called = True
+
+    with patch("ndetect.text_detection.logger", mock_logger):
+        with patch("ndetect.text_detection.cleanup_resources", mock_cleanup):
+            result = scan_paths([str(tmp_path)])
+
+            assert not cleanup_called
+            assert len(result) == 5
+            assert all(isinstance(f, TextFile) for f in result)
+
+
+def test_scan_paths_with_worker_limit(tmp_path: Path) -> None:
+    """Test scanning with worker limit and verify cleanup."""
+    for i in range(20):
+        test_file = tmp_path / f"test{i}.txt"
+        test_file.write_text(f"test content {i}")
+
+    with ProcessPoolExecutor(max_workers=2) as executor:
+        original_process_count = len(multiprocessing.active_children())
+        result = scan_paths([str(tmp_path)], max_workers=2)
+
+        assert len(result) == 20
+        executor.shutdown(wait=True)
+        time.sleep(0.5)
+
+        final_process_count = len(multiprocessing.active_children())
+        assert final_process_count <= original_process_count
+
+
+def test_process_cleanup_on_error(tmp_path: Path) -> None:
+    """Test that processes are cleaned up even when errors occur."""
+    for i in range(20):
+        test_file = tmp_path / f"test{i}.txt"
+        test_file.write_text(f"test content {i}")
+
+    original_process_count = len(multiprocessing.active_children())
+
+    with patch("ndetect.text_detection._analyze_file", failing_analyze_for_test):
+        scan_paths([str(tmp_path)], max_workers=2)
+        time.sleep(0.5)
+
+        final_process_count = len(multiprocessing.active_children())
+        assert final_process_count <= original_process_count
