@@ -2,12 +2,14 @@
 
 import shutil
 from pathlib import Path
-import pytest
 from typing import Generator
+
+import pytest
+
+
 @pytest.fixture
 def cleanup_duplicates() -> Generator[None, None, None]:
-    """Clean up duplicates directory after test."""
+    """Fixture to clean up the duplicates directory after tests."""
     yield
-    duplicates_dir = Path("duplicates")
-    if duplicates_dir.exists():
-        shutil.rmtree(duplicates_dir) 
+    if Path("duplicates").exists():
+        shutil.rmtree("duplicates")

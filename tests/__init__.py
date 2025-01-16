@@ -1,1 +1,1 @@
-"""Test suite for ndetect.""" 
+"""Test suite for ndetect."""

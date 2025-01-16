@@ -253,3 +253,16 @@ The following parameters can be customized:
 - `--shingle-size`: Size of text shingles (default: 5)
 - `--threshold`: Minimum similarity threshold (default: 0.8)
 - `--min-printable`: Minimum ratio of printable characters (default: 0.8)
+
+## Development
+
+For information about setting up a development environment and contributing to ndetect, please see our [Contributing Guide](CONTRIBUTING.md).
+
+The project uses several code quality tools:
+
+- Black for code formatting
+- Flake8 for style guide enforcement
+- isort for import sorting
+- mypy for static type checking
+
+All of these tools are automatically configured in the development environment when using `nix develop`.

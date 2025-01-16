@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ndetect"
-version = "0.1.0"
+version = "0.2.0"
 description = "A CLI tool for detecting near-duplicate text files using MinHash"
 authors = [
-    {name = "Your Name", email = "your.email@example.com"},
+    {name = "Daniel Klein", email = "othercriteria@gmail.com"},
 ]
 readme = "README.md"
 requires-python = ">=3.12"
@@ -34,20 +34,47 @@ include = ["ndetect*"]
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+lint.select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "C",  # flake8-comprehensions
+    "B",  # flake8-bugbear
+]
+lint.ignore = ["E501"]  # Line length handled by black
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-mypy_path = "typings"
+ignore_missing_imports = true
+cache_dir = ".mypy_cache"
+no_namespace_packages = true
+exclude = [
+    '^build/',
+    '^dist/',
+    '\.git/',
+    '\.mypy_cache/',
+    '\.pytest_cache/',
+    '\.venv/',
+]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_decorators = false
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
-    "black>=24.0.0",
     "mypy>=1.8.0",
     "ruff>=0.2.0",
     "types-setuptools>=69.0.0",
     "datasketch>=1.5.0",
     "numpy>=1.24.0",
     "types-networkx>=3.2.0",
-] 
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-v --tb=short"

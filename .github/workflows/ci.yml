@@ -24,4 +24,4 @@ jobs:
     - name: Type check with mypy
       run: mypy .
     - name: Test with pytest
-      run: pytest 
+      run: pytest
