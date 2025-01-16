@@ -1,9 +1,9 @@
-import logging
-
 from rich.console import Console
 from rich.panel import Panel
 
-logger = logging.getLogger(__name__)
+from ndetect.logging import StructuredLogger, setup_logging
+
+logger: StructuredLogger = setup_logging(None)
 
 
 class NDetectError(Exception):
@@ -50,31 +50,39 @@ class InvalidFileError(NDetectError):
 
 
 def handle_error(console: Console, error: Exception) -> int:
-    """Handle errors with user-friendly messages."""
-    error_msg = format_error_message(error)
-    panel = Panel(
-        error_msg,
-        title="Error",
-        border_style="red",
-        padding=(1, 2),
+    """Handle errors with structured logging."""
+    logger.error_with_fields(
+        "Operation failed",
+        error_type=type(error).__name__,
+        error_message=str(error),
+        operation="error_handling",
     )
-    console.print(panel)
 
     if isinstance(error, DiskSpaceError):
-        logger.error("Operation failed: %s", error)
-        return 2
+        console.print(
+            Panel(
+                f"[red]Not enough disk space: {error}[/red]",
+                title="Error",
+                border_style="red",
+            )
+        )
     elif isinstance(error, PermissionError):
-        logger.error("Operation failed: %s", error)
-        return 2
-    elif isinstance(error, FileOperationError):
-        logger.error("File operation failed: %s", error)
-        return 3
-    elif isinstance(error, InvalidFileError):
-        logger.error("Invalid file: %s", error)
-        return 4
+        console.print(
+            Panel(
+                f"[red]Permission denied: {error}[/red]",
+                title="Error",
+                border_style="red",
+            )
+        )
     else:
-        logger.exception("Unexpected error")
-        return 1
+        console.print(
+            Panel(
+                f"[red]Operation failed: {error}[/red]",
+                title="Error",
+                border_style="red",
+            )
+        )
+    return 1
 
 
 def format_error_message(error: Exception) -> str:

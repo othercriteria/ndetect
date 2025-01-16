@@ -1,38 +1,106 @@
 """Logging configuration for ndetect."""
 
+import json
 import logging
-import sys
+from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 
-def setup_logging(log_file: Optional[Path] = None, verbose: bool = False) -> None:
+class JsonFormatter(logging.Formatter):
+    """Custom formatter that outputs logs in JSON format."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format the log record as JSON."""
+        # Base log entry with standard fields
+        log_entry: Dict[str, Any] = {
+            "timestamp": datetime.fromtimestamp(record.created).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+
+        # Add location info if available
+        if record.pathname and record.lineno:
+            log_entry["location"] = {
+                "file": record.pathname,
+                "line": record.lineno,
+                "function": record.funcName,
+            }
+
+        # Add any extra attributes that were passed
+        if hasattr(record, "extra_fields"):
+            log_entry.update(record.extra_fields)
+
+        # Add exception info if present
+        if record.exc_info:
+            log_entry["exception"] = self.formatException(record.exc_info)
+
+        return json.dumps(log_entry)
+
+
+class StructuredLogger(logging.Logger):
+    """Logger with additional structured logging capabilities."""
+
+    def info_with_fields(self, message: str, **kwargs: Any) -> None:
+        """Log at INFO level with structured fields."""
+        extra = {"extra_fields": kwargs}
+        self.info(message, extra=extra)
+
+    def error_with_fields(self, message: str, **kwargs: Any) -> None:
+        """Log at ERROR level with structured fields."""
+        extra = {"extra_fields": kwargs}
+        self.error(message, extra=extra)
+
+    def debug_with_fields(self, message: str, **kwargs: Any) -> None:
+        """Log at DEBUG level with structured fields."""
+        extra = {"extra_fields": kwargs}
+        self.debug(message, extra=extra)
+
+    def warning_with_fields(self, message: str, **kwargs: Any) -> None:
+        """Log at WARNING level with structured fields."""
+        extra = {"extra_fields": kwargs}
+        self.warning(message, extra=extra)
+
+
+# Register our logger class
+logging.setLoggerClass(StructuredLogger)
+
+
+def setup_logging(
+    log_file: Optional[Path] = None, verbose: bool = False
+) -> StructuredLogger:
     """
     Configure logging for ndetect.
 
     Args:
         log_file: Optional path to log file. If None, only log to console.
         verbose: If True, set log level to DEBUG.
+
+    Returns:
+        StructuredLogger: Configured logger instance with structured logging capabilities.
     """
     # Create logger
-    logger = logging.getLogger("ndetect")
+    logger = logging.getLogger("ndetect")  # type: ignore[assignment]
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
+    logger.handlers = []  # Clear any existing handlers
 
     # Create formatters
-    console_formatter = logging.Formatter("%(message)s")
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+    json_formatter = JsonFormatter()
+    console_formatter = logging.Formatter("%(message)s")  # Keep console output simple
 
     # Console handler
-    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler = logging.StreamHandler()
     console_handler.setFormatter(console_formatter)
     console_handler.setLevel(logging.INFO)
     logger.addHandler(console_handler)
 
     # File handler (if log_file is specified)
     if log_file:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(file_formatter)
+        file_handler.setFormatter(json_formatter)
         file_handler.setLevel(logging.DEBUG)
         logger.addHandler(file_handler)
+
+    return logger  # type: ignore[return-value]

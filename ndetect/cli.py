@@ -12,7 +12,7 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 from ndetect.exceptions import handle_error
-from ndetect.logging import setup_logging
+from ndetect.logging import StructuredLogger, setup_logging
 from ndetect.models import MoveConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
 from ndetect.similarity import Group, SimilarityGraph
@@ -247,6 +247,15 @@ def handle_interactive_mode(
     ui: InteractiveUI, text_files: List[TextFile], threshold: float
 ) -> int:
     """Handle interactive mode with rich UI."""
+    logger = setup_logging(None)  # Add logger for interactive mode
+
+    logger.info_with_fields(
+        "Starting interactive mode",
+        operation="start",
+        total_files=len(text_files),
+        threshold=threshold,
+    )
+
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -255,34 +264,46 @@ def handle_interactive_mode(
         console=ui.console,
     ) as progress:
         graph = build_similarity_graph(text_files, threshold, progress)
+        logger.info_with_fields(
+            "Graph built", operation="analysis", similar_groups=len(graph.get_groups())
+        )
 
     while True:
         groups = graph.get_groups()
         if not groups:
             if ui.pending_moves:
+                logger.info_with_fields(
+                    "Processing pending moves",
+                    operation="cleanup",
+                    total_moves=len(ui.pending_moves),
+                )
                 return handle_cleanup_phase(ui)
+            logger.info_with_fields(
+                "No more duplicate groups found", operation="complete", status="success"
+            )
             ui.show_success("No more duplicate groups found.")
             return 0
 
+        logger.info_with_fields(
+            "Processing group", operation="group", group_size=len(groups[0].files)
+        )
         action = process_group(ui, graph, groups[0])
         if action == "q":
+            logger.info_with_fields("User quit", operation="complete", status="quit")
             return 0
         elif action == "k":
+            logger.info_with_fields(
+                "Group kept",
+                operation="group",
+                status="kept",
+                files=[str(f) for f in groups[0].files],
+            )
             graph.remove_group(groups[0].files)
 
 
-def setup_non_interactive_logging(log_file: Optional[Path]) -> logging.Logger:
+def setup_non_interactive_logging(log_file: Optional[Path]) -> StructuredLogger:
     """Configure logging for non-interactive mode."""
-    logger = logging.getLogger("ndetect")
-    if log_file:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(str(log_file))
-        file_handler.setFormatter(
-            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-        )
-        logger.addHandler(file_handler)
-        logger.setLevel(logging.INFO)
-    return logger
+    return setup_logging(log_file=log_file)
 
 
 def process_similar_groups(
@@ -292,12 +313,13 @@ def process_similar_groups(
     holding_dir: Path,
     retention_config: Optional[RetentionConfig],
     dry_run: bool,
-    logger: logging.Logger,
+    logger: StructuredLogger,
 ) -> List[MoveOperation]:
     """Process groups of similar files and prepare moves."""
     groups = graph.get_groups()
     if not groups:
         console.print("[yellow]No similar files found[/yellow]")
+        logger.info_with_fields("No similar files found", operation="process_groups")
         return []
 
     all_moves: List[MoveOperation] = []
@@ -314,17 +336,30 @@ def process_similar_groups(
         for move in moves:
             rel_src = move.source.relative_to(base_dir) if base_dir else move.source
             rel_dst = move.destination
-            msg = f"  {rel_src} -> {rel_dst}"
 
+            logger.info_with_fields(
+                "Processing move operation",
+                operation="move",
+                dry_run=dry_run,
+                source=str(rel_src),
+                destination=str(rel_dst),
+                group_id=i,
+            )
+
+            msg = f"  {rel_src} -> {rel_dst}"
             if dry_run:
-                logger.info("[DRY RUN] Would move: %s", msg)
                 console.print(f"[dim]{msg}[/dim]")
             else:
-                logger.info("Moving: %s", msg)
                 console.print(msg)
 
         all_moves.extend(moves)
 
+    logger.info_with_fields(
+        "Finished processing groups",
+        operation="process_groups",
+        total_groups=len(groups),
+        total_moves=len(all_moves),
+    )
     return all_moves
 
 
@@ -343,9 +378,25 @@ def handle_non_interactive_mode(
     holding_dir = holding_dir or Path("duplicates")
 
     try:
+        logger.info_with_fields(
+            "Starting non-interactive processing",
+            operation="start",
+            total_files=len(text_files),
+            threshold=threshold,
+            base_dir=str(base_dir) if base_dir else None,
+            holding_dir=str(holding_dir),
+            dry_run=dry_run,
+        )
+
         with console.status("[bold green]Analyzing file similarities..."):
             graph = SimilarityGraph(threshold=threshold)
             graph.add_files(text_files)
+
+        logger.info_with_fields(
+            "File analysis complete",
+            operation="analysis",
+            similar_groups=len(graph.get_groups()),
+        )
 
         all_moves = process_similar_groups(
             console=console,
@@ -358,17 +409,42 @@ def handle_non_interactive_mode(
         )
 
         if not all_moves:
+            logger.info_with_fields(
+                "No moves to execute", operation="complete", status="no_moves"
+            )
             return 0
 
         if dry_run:
+            logger.info_with_fields(
+                "Dry run complete",
+                operation="complete",
+                status="dry_run",
+                planned_moves=len(all_moves),
+            )
             console.print(f"\nWould move {len(all_moves)} files")
             return 0
 
         try:
+            logger.info_with_fields(
+                "Executing moves", operation="move_start", total_moves=len(all_moves)
+            )
             execute_moves(all_moves)
+            logger.info_with_fields(
+                "Moves completed successfully",
+                operation="complete",
+                status="success",
+                total_moves=len(all_moves),
+            )
             console.print(f"\n[green]Successfully moved {len(all_moves)} files[/green]")
             return 0
         except Exception as e:
+            logger.error_with_fields(
+                "Move operation failed",
+                operation="complete",
+                status="error",
+                error_type=type(e).__name__,
+                error_message=str(e),
+            )
             return handle_error(console, e)
 
     finally:

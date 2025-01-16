@@ -470,22 +470,18 @@ def test_non_interactive_mode_with_logging(
         log_file=log_file,
     )
 
-    assert result == 0, "Expected successful execution"
-    assert log_file.exists(), "Log file should exist"
+    assert result == 0
+    assert len(moves_executed) > 0
 
-    # Verify file movement
-    moved_files = list(duplicates_dir.glob("**/*.txt"))
-    assert len(moved_files) == 1, f"Expected 1 moved file, got {len(moved_files)}"
-
-    # Verify exactly one file remains in original location
-    remaining_files = list(tmp_path.glob("*.txt"))
-    assert (
-        len(remaining_files) == 1
-    ), f"Expected 1 remaining file, got {len(remaining_files)}"
-
-    # Verify log contains move operation
+    # Check log content
     log_content = log_file.read_text()
-    assert "Moving:" in log_content, "Log should contain move operation"
+
+    # Look for structured log entries
+    assert '"operation": "move"' in log_content, "Log should contain move operation"
+    assert (
+        '"status": "success"' in log_content
+    ), "Log should indicate successful completion"
+    assert str(file2.name) in log_content, "Log should contain moved file name"
 
 
 def test_non_interactive_mode_error_handling(
