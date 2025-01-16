@@ -8,7 +8,7 @@
 
 ### Install
 
-Assume you have a working Nix/flake/direnv setup.
+Assume you have a working Nix/flakes/direnv setup.
 
 ```bash
 git clone git@github.com:othercriteria/ndetect.git
@@ -87,12 +87,14 @@ The tool operates in two primary modes:
 
 1. **Available Actions**:
    - **[k] Keep all**: No changes are made to this group, and it won't appear again
-   - **[d] Delete duplicates**: Select files to delete
-   - **[m] Move duplicates**: Select files to move (not yet implemented)
-   - **[i] Show details**: Display detailed information including:
-     - File metadata (size, timestamps, permissions)
-     - Pairwise similarity scores
-     - Content previews
+   - **[d] Delete duplicates**: Select files to delete (with space-separated numbers,
+     'all', or 'none')
+   - **[m] Move duplicates**: Select files to move to the holding directory
+   - **[p] Preview**: Display file contents with configurable limits:
+     - Maximum characters (default: 100)
+     - Maximum lines (default: 3)
+     - Truncation marker ("...")
+   - **[s] Show similarities**: Display pairwise similarity scores between files
    - **[q] Quit**: Exit the program
 
 1. **Group Management**:
@@ -151,6 +153,9 @@ The tool operates in two primary modes:
 ## Key Features
 
 ### 1. MinHash-Based Similarity
+
+For technical background, see the [MinHash paper](http://www.cohenwang.com/edith/Surveys/minhash.pdf)
+and the Python implemetation in the [datasketch library](https://github.com/ekzhu/datasketch).
 
 - Efficiently calculates content similarity for large collections of text documents.
 - Groups duplicates using a **similarity graph**:
