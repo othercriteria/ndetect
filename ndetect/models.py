@@ -119,6 +119,7 @@ class FileAnalyzerConfig:
     shingle_size: int = 5
     allowed_extensions: Optional[Set[str]] = None
     follow_symlinks: bool = True
+    skip_empty: bool = True
     max_workers: Optional[int] = None
 
     def __post_init__(self) -> None:

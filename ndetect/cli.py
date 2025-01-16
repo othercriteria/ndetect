@@ -151,6 +151,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         dest="follow_symlinks",
         help="Do not follow symbolic links when scanning",
     )
+    parser.add_argument(
+        "--include-empty",
+        action="store_false",
+        dest="skip_empty",
+        help="Include empty (zero-byte) files in analysis",
+    )
 
     return parser.parse_args(argv)
 

@@ -221,6 +221,7 @@ ndetect --mode non-interactive \
 - `--min-printable-ratio [float]`: Minimum ratio of printable characters (default: 0.8)
 - `--num-perm [int]`: Number of MinHash permutations (default: 128)
 - `--shingle-size [int]`: Size of text shingles for comparison (default: 5)
+- `--include-empty`: Include empty (zero-byte) files in analysis (default: skip empty files)
 
 ### File Selection Options
 

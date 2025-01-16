@@ -657,3 +657,25 @@ def test_scan_paths_symlink_behavior(tmp_path: Path) -> None:
     assert len(paths) == 1
     assert original in paths
     assert link not in paths
+
+
+def test_scan_paths_with_empty_files(tmp_path: Path) -> None:
+    """Test handling of empty files."""
+    # Create a regular text file
+    text_file = tmp_path / "test.txt"
+    text_file.write_text("Hello, World!")
+
+    # Create an empty file
+    empty_file = tmp_path / "empty.txt"
+    empty_file.touch()
+
+    # Test with default settings (skip empty)
+    text_files = scan_paths([str(tmp_path)], min_printable_ratio=0.8)
+    assert len(text_files) == 1
+    assert text_files[0].path == text_file
+
+    # Test with empty files included
+    text_files = scan_paths([str(tmp_path)], min_printable_ratio=0.8, skip_empty=False)
+    assert len(text_files) == 2
+    paths = {tf.path for tf in text_files}
+    assert paths == {text_file, empty_file}

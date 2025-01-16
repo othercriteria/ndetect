@@ -37,6 +37,7 @@ def scan_paths(
     num_perm: int = 128,
     shingle_size: int = 5,
     follow_symlinks: bool = True,
+    skip_empty: bool = True,
     max_workers: Optional[int] = None,
 ) -> List[TextFile]:
     """Scan paths for text files."""
@@ -45,6 +46,7 @@ def scan_paths(
         num_perm=num_perm,
         shingle_size=shingle_size,
         follow_symlinks=follow_symlinks,
+        skip_empty=skip_empty,
         allowed_extensions=None,
         max_workers=max_workers,
     )

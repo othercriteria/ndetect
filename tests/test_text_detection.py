@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -56,11 +57,16 @@ def test_file_analyzer_with_low_printable_ratio(tmp_path: Path) -> None:
 
 def test_file_analyzer_empty_file(tmp_path: Path) -> None:
     """Test analyzer with empty file."""
-    # Create config with .txt in allowed extensions
-    analyzer = FileAnalyzer(FileAnalyzerConfig(allowed_extensions={".txt"}))
+    # Test with default config (skip empty files)
+    default_analyzer = FileAnalyzer(FileAnalyzerConfig())
     file_path = tmp_path / "empty.txt"
     file_path.write_text("")
-    result = analyzer.analyze_file(file_path)
+    result = default_analyzer.analyze_file(file_path)
+    assert result is None  # Empty files are skipped by default
+
+    # Test with skip_empty=False
+    include_empty_analyzer = FileAnalyzer(FileAnalyzerConfig(skip_empty=False))
+    result = include_empty_analyzer.analyze_file(file_path)
     assert result is not None
     assert result.size == 0
 
@@ -327,3 +333,25 @@ def test_scan_paths_with_max_workers(tmp_path: Path) -> None:
     paths1 = {f.path for f in files1}
     paths2 = {f.path for f in files2}
     assert paths1 == paths2
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Requires Unix-like OS")
+def test_symlink_permissions(tmp_path: Path) -> None:
+    """Test symlink with different permission scenarios."""
+    analyzer = FileAnalyzer(FileAnalyzerConfig())
+
+    # Create original file with restricted permissions
+    original = tmp_path / "restricted.txt"
+    original.write_text("Secret content")
+    original.chmod(0o000)
+
+    # Create symlink
+    link = tmp_path / "link.txt"
+    link.symlink_to(original)
+
+    try:
+        result = analyzer.analyze_file(link)
+        assert result is None
+    finally:
+        # Restore permissions for cleanup
+        original.chmod(0o644)

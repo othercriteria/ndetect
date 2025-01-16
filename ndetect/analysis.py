@@ -68,6 +68,10 @@ class FileAnalyzer:
         if not self.config.follow_symlinks and file_path.is_symlink():
             return False
 
+        # Skip empty files if configured
+        if self.config.skip_empty and real_path.stat().st_size == 0:
+            return False
+
         try:
             with real_path.open("rb") as f:
                 raw_bytes = f.read(8 * 1024)  # Read first 8KB
