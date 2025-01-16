@@ -154,6 +154,12 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         dest="skip_empty",
         help="Include empty (zero-byte) files in analysis",
     )
+    parser.add_argument(
+        "--max-symlink-depth",
+        type=int,
+        default=10,
+        help="Maximum depth when following symbolic links (default: 10)",
+    )
 
     return parser.parse_args(argv)
 

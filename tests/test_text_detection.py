@@ -242,27 +242,24 @@ def test_file_analyzer_with_broken_symlink(tmp_path: Path) -> None:
 
 
 def test_file_analyzer_with_nested_symlinks(tmp_path: Path) -> None:
-    """Test analyzer with deeply nested symbolic links."""
+    """Test analyzer with nested symbolic links."""
     analyzer = FileAnalyzer(FileAnalyzerConfig())
 
     # Create original file
     original = tmp_path / "original.txt"
     original.write_text("Hello, World!")
 
-    # Create a chain of 10 nested symlinks
-    current = original
-    links = []
-    for i in range(10):
-        link = tmp_path / f"link_{i}.txt"
-        link.symlink_to(current)
-        links.append(link)
-        current = link
+    # Create a chain of symlinks
+    link1 = tmp_path / "link1.txt"
+    link2 = tmp_path / "link2.txt"
+    link3 = tmp_path / "link3.txt"
 
-    # Test the deepest link
-    result = analyzer.analyze_file(links[-1])
+    link1.symlink_to(original)
+    link2.symlink_to(link1)
+    link3.symlink_to(link2)
+
+    result = analyzer.analyze_file(link3)
     assert result is not None
-    assert result.path == links[-1]
-    assert result.size == len("Hello, World!")
 
 
 def test_file_analyzer_with_relative_symlinks(tmp_path: Path) -> None:

@@ -247,8 +247,37 @@ ndetect --mode non-interactive \
 
 - `--follow-symlinks`: Follow symbolic links when scanning (default)
 - `--no-follow-symlinks`: Do not follow symbolic links when scanning
+- `--max-symlink-depth [int]`: Maximum depth when following symbolic links (default: 10)
 
-## Future Considerations (Post-MVP)
+### Symlink Handling
+
+ndetect implements secure and robust symlink handling with several safety mechanisms:
+
+1. **Depth Protection**: Limits the maximum depth of symlink chains to prevent:
+   - Stack overflow from excessive recursion
+   - Resource exhaustion from deeply nested links
+   - Potential denial of service attacks
+
+1. **Cycle Detection**: Maintains a set of visited paths to detect and safely handle:
+   - Circular references
+   - Self-referential symlinks
+   - Complex cyclic structures
+
+1. **Path Resolution**:
+   - Converts relative symlinks to absolute paths
+   - Validates each link in the chain
+   - Ensures target files actually exist
+
+1. **Permission Handling**:
+   - Respects file system permissions
+   - Fails gracefully on inaccessible targets
+   - Maintains security context during traversal
+
+The `--max-symlink-depth` option allows you to adjust the depth limit based on your
+needs, with a default of 10 levels for safety. Increase this value when working with
+deeply nested symlink structures, or decrease it in security-sensitive environments.
+
+### Future Considerations (Post-MVP)
 
 ### Error Handling & Operations
 

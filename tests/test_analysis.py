@@ -48,3 +48,26 @@ def test_file_analyzer_with_custom_config(tmp_path: Path) -> None:
     result = analyzer.analyze_file(test_file)
     assert result is not None
     assert result.has_signature()
+
+
+def test_file_analyzer_with_deep_symlinks(tmp_path: Path) -> None:
+    """Test analyzer with deep symlink chains."""
+    # Create a chain that exceeds default depth but within custom depth
+    original = tmp_path / "original.txt"
+    original.write_text("Hello, World!")
+
+    current = original
+    for i in range(12):  # Create chain of 12 symlinks (exceeds default 10)
+        link = tmp_path / f"link{i}.txt"
+        link.symlink_to(current)
+        current = link
+
+    # Should fail with default config
+    default_analyzer = FileAnalyzer(FileAnalyzerConfig())
+    assert default_analyzer.analyze_file(current) is None
+
+    # Should succeed with higher max_symlink_depth
+    custom_analyzer = FileAnalyzer(FileAnalyzerConfig(max_symlink_depth=15))
+    result = custom_analyzer.analyze_file(current)
+    assert result is not None
+    assert result.path == current

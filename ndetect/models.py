@@ -121,6 +121,7 @@ class FileAnalyzerConfig:
     follow_symlinks: bool = True
     skip_empty: bool = True
     max_workers: Optional[int] = None
+    max_symlink_depth: int = 10  # New field with default matching resolve_symlink
 
     def __post_init__(self) -> None:
         """Validate configuration and set defaults."""
@@ -138,3 +139,6 @@ class FileAnalyzerConfig:
 
         if self.max_workers is not None and self.max_workers <= 0:
             raise ValueError("max_workers must be positive")
+
+        if self.max_symlink_depth <= 0:
+            raise ValueError("max_symlink_depth must be positive")

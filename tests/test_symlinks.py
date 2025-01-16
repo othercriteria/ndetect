@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from ndetect.analysis import FileAnalyzer
+from ndetect.analysis import FileAnalyzer, resolve_symlink
 from ndetect.models import FileAnalyzerConfig
 
 
@@ -130,3 +130,87 @@ def test_symlink_validation(tmp_path: Path) -> None:
     result = analyzer.analyze_file(text_file)
     assert result is not None
     assert result.path == text_file
+
+
+def test_resolve_symlink_basic(tmp_path: Path) -> None:
+    """Test basic symlink resolution."""
+    original = tmp_path / "original.txt"
+    original.write_text("content")
+    link = tmp_path / "link.txt"
+    link.symlink_to(original)
+
+    resolved = resolve_symlink(link)
+    assert resolved == original.resolve()
+
+
+def test_resolve_symlink_nested(tmp_path: Path) -> None:
+    """Test nested symlink resolution."""
+    original = tmp_path / "original.txt"
+    original.write_text("content")
+
+    link1 = tmp_path / "link1.txt"
+    link2 = tmp_path / "link2.txt"
+    link3 = tmp_path / "link3.txt"
+
+    link1.symlink_to(original)
+    link2.symlink_to(link1)
+    link3.symlink_to(link2)
+
+    resolved = resolve_symlink(link3)
+    assert resolved == original.resolve()
+
+
+def test_resolve_symlink_circular(tmp_path: Path) -> None:
+    """Test circular symlink detection."""
+    link1 = tmp_path / "link1.txt"
+    link2 = tmp_path / "link2.txt"
+
+    link1.symlink_to(link2)
+    link2.symlink_to(link1)
+
+    assert resolve_symlink(link1) is None
+
+
+def test_resolve_symlink_max_depth(tmp_path: Path) -> None:
+    """Test max depth limit."""
+    original = tmp_path / "original.txt"
+    original.write_text("content")
+
+    current = original
+    links = []
+
+    # Create chain of 15 symlinks
+    for i in range(15):
+        link = tmp_path / f"link{i}.txt"
+        link.symlink_to(current)
+        links.append(link)
+        current = link
+
+    # Should fail with default max_depth=10
+    assert resolve_symlink(links[-1]) is None
+
+    # Should succeed with higher max_depth
+    assert resolve_symlink(links[-1], max_depth=20) == original.resolve()
+
+
+def test_resolve_symlink_relative(tmp_path: Path) -> None:
+    """Test relative symlink resolution."""
+    subdir = tmp_path / "subdir"
+    subdir.mkdir()
+
+    original = tmp_path / "original.txt"
+    original.write_text("content")
+
+    link = subdir / "link.txt"
+    link.symlink_to(Path("../original.txt"))
+
+    resolved = resolve_symlink(link)
+    assert resolved == original.resolve()
+
+
+def test_resolve_symlink_broken(tmp_path: Path) -> None:
+    """Test broken symlink handling."""
+    link = tmp_path / "broken.txt"
+    link.symlink_to(tmp_path / "nonexistent.txt")
+
+    assert resolve_symlink(link) is None

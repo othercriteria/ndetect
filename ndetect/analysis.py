@@ -1,78 +1,96 @@
-"""File analysis functionality for ndetect."""
+"""File analysis functionality."""
 
 from pathlib import Path
 from typing import Optional
 
-from ndetect.models import FileAnalyzerConfig, TextFile
+from .models import FileAnalyzerConfig, TextFile
+
+__all__ = ["FileAnalyzer", "resolve_symlink"]
+
+
+def resolve_symlink(path: Path, max_depth: int = 10) -> Optional[Path]:
+    """Resolve a symlink with maximum depth protection."""
+    try:
+        # For non-symlinks, just verify existence and return
+        if not path.is_symlink():
+            return path if path.exists() else None
+
+        # For symlinks, follow the chain
+        current = path
+        seen = set()
+        depth = 0
+
+        while depth < max_depth:
+            if current in seen:
+                return None  # Circular reference
+            seen.add(current)
+
+            if not current.exists():
+                return None
+
+            if not current.is_symlink():
+                return current
+
+            # Get the target and make it absolute if needed
+            target = current.readlink()
+            if not target.is_absolute():
+                target = (current.parent / target).resolve()
+
+            current = target
+            depth += 1
+
+        return None  # Max depth exceeded
+
+    except (OSError, RuntimeError):
+        return None
 
 
 class FileAnalyzer:
-    """Analyzes files for text content and generates MinHash signatures."""
+    """Analyzes files for text content."""
 
     def __init__(self, config: FileAnalyzerConfig) -> None:
-        """Initialize the analyzer with given configuration."""
         self.config = config
 
-    def _is_valid_symlink(self, file_path: Path) -> bool:
-        """Check if symlink is valid and not circular."""
-        if not file_path.is_symlink():
-            return True
-
-        # Check for circular symlinks
-        try:
-            real_path = file_path.resolve(strict=True)
-            return real_path.exists()
-        except (RuntimeError, OSError):
-            return False
-
     def analyze_file(self, file_path: Path) -> Optional[TextFile]:
-        """
-        Analyze a file and return a TextFile instance if it's a valid text file.
+        """Analyze a file and return TextFile if valid."""
+        try:
+            if not self._is_valid_text_file(file_path):
+                return None
 
-        Args:
-            file_path: Path to the file to analyze
-
-        Returns:
-            TextFile instance if the file is valid, None otherwise
-        """
-        # Early validation of symlinks
-        if not self._is_valid_symlink(file_path):
+            return TextFile.from_path(file_path)
+        except OSError:
             return None
-
-        if not self._is_valid_text_file(file_path):
-            return None
-
-        return TextFile.from_path(
-            file_path,
-            compute_minhash=True,
-            num_perm=self.config.num_perm,
-            shingle_size=self.config.shingle_size,
-        )
 
     def _is_valid_text_file(self, file_path: Path) -> bool:
         """Check if a file is a valid text file according to configuration."""
-        # Check for circular symlinks
         try:
-            real_path = file_path.resolve(strict=True)
-        except (RuntimeError, OSError):
-            return False
+            # Handle symlinks
+            if file_path.is_symlink():
+                if not self.config.follow_symlinks:
+                    return False
 
-        # Check if extension is allowed
-        if (
-            self.config.allowed_extensions is not None
-            and file_path.suffix.lower() not in self.config.allowed_extensions
-        ):
-            return False
+                resolved = resolve_symlink(
+                    file_path, max_depth=self.config.max_symlink_depth
+                )
+                if resolved is None:
+                    return False
+                real_path = resolved
+            else:
+                if not file_path.exists():
+                    return False
+                real_path = file_path
 
-        # If symlinks are disabled and this is a symlink, skip it
-        if not self.config.follow_symlinks and file_path.is_symlink():
-            return False
+            # Check if extension is allowed
+            if (
+                self.config.allowed_extensions is not None
+                and file_path.suffix.lower() not in self.config.allowed_extensions
+            ):
+                return False
 
-        # Skip empty files if configured
-        if self.config.skip_empty and real_path.stat().st_size == 0:
-            return False
+            # Skip empty files if configured
+            if self.config.skip_empty and real_path.stat().st_size == 0:
+                return False
 
-        try:
             with real_path.open("rb") as f:
                 raw_bytes = f.read(8 * 1024)  # Read first 8KB
 

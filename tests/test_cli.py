@@ -566,12 +566,16 @@ def test_parse_args_symlink_options() -> None:
     # Test default behavior
     args = parse_args(["path/to/file"])
     assert args.follow_symlinks is True
+    assert args.max_symlink_depth == 10
 
-    # Test explicit enable
-    args = parse_args(["--follow-symlinks", "path/to/file"])
+    # Test explicit enable with custom depth
+    args = parse_args(
+        ["--follow-symlinks", "--max-symlink-depth", "20", "path/to/file"]
+    )
     assert args.follow_symlinks is True
+    assert args.max_symlink_depth == 20
 
-    # Test explicit disable
+    # Test explicit disable (depth irrelevant when not following)
     args = parse_args(["--no-follow-symlinks", "path/to/file"])
     assert args.follow_symlinks is False
 
