@@ -1,6 +1,7 @@
 """Text file detection and scanning functionality."""
 
 import logging
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from pathlib import Path
@@ -11,6 +12,13 @@ from ndetect.models import FileAnalyzerConfig, TextFile
 from ndetect.types import FileIterator
 
 logger = logging.getLogger(__name__)
+
+# Set the start method to 'spawn' to avoid fork-related warnings
+try:
+    multiprocessing.set_start_method("spawn")
+except RuntimeError:
+    # Method was already set, ignore
+    pass
 
 
 def _analyze_file(args: tuple[Path, FileAnalyzerConfig]) -> Optional[TextFile]:
@@ -54,8 +62,16 @@ def scan_paths(
     # Collect all files
     all_files = list(_collect_files(paths, follow_symlinks=follow_symlinks))
 
-    # Use parallel processing for analysis
-    workers = config.max_workers or cpu_count()
+    # For small numbers of files, process sequentially to avoid overhead
+    if len(all_files) < 10:
+        return [
+            result
+            for result in (_analyze_file((path, config)) for path in all_files)
+            if result is not None
+        ]
+
+    # Use parallel processing for larger sets of files
+    workers = min(config.max_workers or cpu_count(), len(all_files))
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(_analyze_file, (path, config)) for path in all_files]
 

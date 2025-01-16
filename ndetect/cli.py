@@ -215,13 +215,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         elif args.mode == "non-interactive":
             return handle_non_interactive_mode(
                 console=console,
-                text_files=text_files,
+                paths=args.paths,
                 threshold=args.threshold,
                 base_dir=base_dir,
                 holding_dir=args.holding_dir,
                 dry_run=args.dry_run,
                 log_file=args.log_file,
                 retention_config=retention_config,
+                min_printable_ratio=args.min_printable_ratio,
+                num_perm=args.num_perm,
+                shingle_size=args.shingle_size,
+                follow_symlinks=args.follow_symlinks,
+                max_workers=args.max_workers,
             )
 
         console.print("[red]Unknown mode specified.[/red]")
@@ -416,13 +421,18 @@ def process_similar_groups(
 
 def handle_non_interactive_mode(
     console: Console,
-    text_files: List["TextFile"],
+    paths: List[str],
     threshold: float,
     base_dir: Optional[Path] = None,
     holding_dir: Optional[Path] = None,
     dry_run: bool = False,
     log_file: Optional[Path] = None,
     retention_config: Optional[RetentionConfig] = None,
+    min_printable_ratio: float = 0.8,
+    num_perm: int = 128,
+    shingle_size: int = 5,
+    follow_symlinks: bool = True,
+    max_workers: Optional[int] = None,
 ) -> int:
     """Handle non-interactive mode with automated processing."""
     logger = setup_non_interactive_logging(log_file)
@@ -432,12 +442,33 @@ def handle_non_interactive_mode(
         logger.info_with_fields(
             "Starting non-interactive processing",
             operation="start",
-            total_files=len(text_files),
+            paths=paths,
             threshold=threshold,
             base_dir=str(base_dir) if base_dir else None,
             holding_dir=str(holding_dir),
             dry_run=dry_run,
         )
+
+        with console.status("[bold green]Scanning files..."):
+            text_files = scan_paths(
+                paths,
+                min_printable_ratio=min_printable_ratio,
+                num_perm=num_perm,
+                shingle_size=shingle_size,
+                follow_symlinks=follow_symlinks,
+                max_workers=max_workers,
+            )
+
+        if not text_files:
+            logger.info_with_fields(
+                "No valid text files found",
+                operation="complete",
+                status="no_files",
+            )
+            console.print("[red]No valid text files found.[/red]")
+            return 1
+
+        console.print(f"Found {len(text_files)} text files.")
 
         with console.status("[bold green]Analyzing file similarities..."):
             graph = SimilarityGraph(threshold=threshold)
@@ -458,7 +489,6 @@ def handle_non_interactive_mode(
             dry_run=dry_run,
             logger=logger,
         )
-
         if not all_moves:
             logger.info_with_fields(
                 "No moves to execute", operation="complete", status="no_moves"
@@ -476,6 +506,9 @@ def handle_non_interactive_mode(
             return 0
 
         try:
+            # Create holding directory and any necessary parent directories
+            holding_dir.mkdir(parents=True, exist_ok=True)
+
             logger.info_with_fields(
                 "Executing moves", operation="move_start", total_moves=len(all_moves)
             )
@@ -497,7 +530,6 @@ def handle_non_interactive_mode(
                 error_message=str(e),
             )
             return handle_error(console, e)
-
     finally:
         if log_file:
             for handler in logger.handlers[:]:

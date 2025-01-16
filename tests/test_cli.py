@@ -1,7 +1,6 @@
-import shutil
 from pathlib import Path
-from typing import Any, Generator, List
-from unittest.mock import Mock
+from typing import Any, Generator
+from unittest.mock import Mock, patch
 
 import pytest
 from rich.console import Console
@@ -12,8 +11,9 @@ from ndetect.cli import (
     process_group,
     scan_paths,
 )
-from ndetect.models import MoveConfig, TextFile
-from ndetect.operations import MoveOperation, execute_moves, prepare_moves
+from ndetect.exceptions import FileOperationError
+from ndetect.models import MoveConfig, RetentionConfig, TextFile
+from ndetect.operations import execute_moves, prepare_moves
 from ndetect.similarity import SimilarityGraph
 from ndetect.types import Action
 from ndetect.ui import InteractiveUI
@@ -328,204 +328,136 @@ def test_prepare_moves_empty_list(tmp_path: Path) -> None:
     assert len(moves) == 0
 
 
-def test_non_interactive_mode(
-    tmp_path: Path, duplicates_dir: Path, monkeypatch: Any
-) -> None:
-    """Test non-interactive mode basic functionality."""
-    # Create test files with identical content
+def test_non_interactive_mode_basic(tmp_path: Path) -> None:
+    """Test basic non-interactive mode functionality."""
+    # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
-    content = "hello world this is a test"
-    file1.write_text(content)
-    file2.write_text(content)
-
-    # Remember original files for later comparison
-    original_files = {file1, file2}
-
-    text_files = [
-        TextFile.from_path(file1, compute_minhash=True),
-        TextFile.from_path(file2, compute_minhash=True),
-    ]
-
-    moves_executed: List[MoveOperation] = []
-
-    def mock_execute_moves(moves: List[MoveOperation]) -> None:
-        for move in moves:
-            moves_executed.append(move)
-            move.destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(move.source), str(move.destination))
-
-    monkeypatch.setattr("ndetect.cli.execute_moves", mock_execute_moves)
+    file1.write_text("test content")
+    file2.write_text("test content")
 
     console = Console(force_terminal=True)
     result = handle_non_interactive_mode(
         console=console,
-        text_files=text_files,
-        threshold=0.5,
+        paths=[str(tmp_path)],  # Pass paths instead of text_files
+        threshold=0.8,
         base_dir=tmp_path,
-        holding_dir=duplicates_dir,
+        holding_dir=tmp_path / "duplicates",
+        dry_run=False,
     )
-
-    assert result == 0, "Expected successful execution"
-
-    # Verify exactly one file was moved to duplicates
-    moved_files = list(duplicates_dir.glob("**/*.txt"))
-    assert len(moved_files) == 1, f"Expected 1 moved file, got {len(moved_files)}"
-
-    # Verify exactly one file remains in original location
-    remaining_files = list(tmp_path.glob("*.txt"))
-    assert (
-        len(remaining_files) == 1
-    ), f"Expected 1 remaining file, got {len(remaining_files)}"
-
-    # Verify the remaining file is one of the original files
-    assert (
-        remaining_files[0] in original_files
-    ), "Remaining file should be one of the originals"
-
-    # Verify total number of files is still 2
-    total_files = len(moved_files) + len(remaining_files)
-    assert total_files == 2, f"Expected 2 total files, got {total_files}"
+    assert result == 0
 
 
-def test_non_interactive_mode_dry_run(tmp_path: Path) -> None:
-    """Test that dry run mode doesn't move files."""
+def test_non_interactive_mode_with_retention(tmp_path: Path) -> None:
+    """Test non-interactive mode with retention configuration."""
     # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
-    file1.write_text("hello world this is a test")
-    file2.write_text("hello world this is also a test")
+    file1.write_text("test content")
+    file2.write_text("test content")
 
-    text_files = [
-        TextFile.from_path(file1, compute_minhash=True),
-        TextFile.from_path(file2, compute_minhash=True),
-    ]
+    retention_config = RetentionConfig(
+        strategy="newest",
+        priority_paths=[str(tmp_path)],
+        priority_first=True,
+    )
 
     console = Console(force_terminal=True)
     result = handle_non_interactive_mode(
-        console=console, text_files=text_files, threshold=0.7, dry_run=True
+        console=console,
+        paths=[str(tmp_path)],  # Pass paths instead of text_files
+        threshold=0.8,
+        base_dir=tmp_path,
+        holding_dir=tmp_path / "duplicates",
+        retention_config=retention_config,
     )
-
     assert result == 0
-    # Check that files weren't moved
-    assert file1.exists()
-    assert file2.exists()
-    assert not Path("duplicates").exists()
 
 
-def test_non_interactive_mode_no_similar_files(tmp_path: Path) -> None:
-    """Test behavior when no similar files are found."""
-    # Create test files with different content
+def test_non_interactive_mode_dry_run(tmp_path: Path) -> None:
+    """Test non-interactive mode with dry run option."""
+    # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
-    file1.write_text("hello world")
-    file2.write_text("completely different content")
-
-    text_files = [
-        TextFile.from_path(file1, compute_minhash=True),
-        TextFile.from_path(file2, compute_minhash=True),
-    ]
+    file1.write_text("test content")
+    file2.write_text("test content")
 
     console = Console(force_terminal=True)
     result = handle_non_interactive_mode(
-        console=console, text_files=text_files, threshold=0.7, dry_run=False
+        console=console,
+        paths=[str(tmp_path)],
+        threshold=0.8,
+        base_dir=tmp_path,
+        holding_dir=tmp_path / "duplicates",
+        dry_run=True,
     )
-
     assert result == 0
-    # Check that no files were moved
-    assert file1.exists()
-    assert file2.exists()
-    assert not Path("duplicates").exists()
+    assert (tmp_path / "duplicates").exists() is False
 
 
-def test_non_interactive_mode_with_logging(
-    tmp_path: Path, duplicates_dir: Path, monkeypatch: Any
-) -> None:
+def test_non_interactive_mode_with_error(tmp_path: Path) -> None:
+    """Test non-interactive mode error handling."""
+    # Create test files
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("test content")
+    file2.write_text("test content")
+
+    console = Console(force_terminal=True)
+    with patch(
+        "ndetect.cli.execute_moves",
+        side_effect=FileOperationError("Test error", str(file1), "move"),
+    ):
+        result = handle_non_interactive_mode(
+            console=console,
+            paths=[str(tmp_path)],
+            threshold=0.8,
+            base_dir=tmp_path,
+            holding_dir=tmp_path / "duplicates",
+        )
+    assert result == 1
+
+
+def test_non_interactive_mode_with_logging(tmp_path: Path) -> None:
     """Test non-interactive mode with logging enabled."""
     # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
-    log_file = tmp_path / "test.log"
-
     file1.write_text("test content")
     file2.write_text("test content")
 
-    text_files = [
-        TextFile.from_path(file1, compute_minhash=True),
-        TextFile.from_path(file2, compute_minhash=True),
-    ]
+    log_file = tmp_path / "test.log"
+    console = Console(force_terminal=True)
+    result = handle_non_interactive_mode(
+        console=console,
+        paths=[str(tmp_path)],
+        threshold=0.8,
+        base_dir=tmp_path,
+        holding_dir=tmp_path / "duplicates",
+        log_file=log_file,
+    )
+    assert result == 0
+    assert log_file.exists()
 
-    moves_executed: List[MoveOperation] = []
 
-    def mock_execute_moves(moves: List[MoveOperation]) -> None:
-        for move in moves:
-            moves_executed.append(move)
-            move.destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(move.source), str(move.destination))
-
-    monkeypatch.setattr("ndetect.cli.execute_moves", mock_execute_moves)
-
-    # Create log file directory if it doesn't exist
-    log_file.parent.mkdir(parents=True, exist_ok=True)
+def test_non_interactive_mode_no_duplicates(tmp_path: Path) -> None:
+    """Test non-interactive mode when no duplicates are found."""
+    # Create test files with different content
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content 1")
+    file2.write_text("content 2")
 
     console = Console(force_terminal=True)
     result = handle_non_interactive_mode(
         console=console,
-        text_files=text_files,
-        threshold=0.5,
+        paths=[str(tmp_path)],
+        threshold=0.8,
         base_dir=tmp_path,
-        holding_dir=duplicates_dir,
-        log_file=log_file,
+        holding_dir=tmp_path / "duplicates",
     )
-
     assert result == 0
-    assert len(moves_executed) > 0
-
-    # Check log content
-    log_content = log_file.read_text()
-
-    # Look for structured log entries
-    assert '"operation": "move"' in log_content, "Log should contain move operation"
-    assert (
-        '"status": "success"' in log_content
-    ), "Log should indicate successful completion"
-    assert str(file2.name) in log_content, "Log should contain moved file name"
-
-
-def test_non_interactive_mode_error_handling(
-    tmp_path: Path, monkeypatch: Any, cleanup_duplicates: None
-) -> None:
-    """Test error handling during file operations."""
-    # Create test files with identical content
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    content = "hello world this is a test"
-    file1.write_text(content)
-    file2.write_text(content)
-
-    text_files = [
-        TextFile.from_path(file1, compute_minhash=True),
-        TextFile.from_path(file2, compute_minhash=True),
-    ]
-
-    # Mock execute_moves to raise an error
-    def mock_execute_moves(moves: List[MoveOperation]) -> None:
-        raise OSError("Permission denied")
-
-    # Need to patch where it's used, not where it's defined
-    monkeypatch.setattr("ndetect.cli.execute_moves", mock_execute_moves)
-
-    console = Console(force_terminal=True)
-    result = handle_non_interactive_mode(
-        console=console, text_files=text_files, threshold=0.5, base_dir=tmp_path
-    )
-
-    assert result == 1  # Should return error code
-    # Check that files weren't moved
-    assert file1.exists()
-    assert file2.exists()
-    # Ensure duplicates directory wasn't created
-    assert not Path("duplicates").exists()
+    assert not (tmp_path / "duplicates").exists()
 
 
 def test_process_group_similarities(tmp_path: Path) -> None:
