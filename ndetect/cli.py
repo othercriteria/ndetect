@@ -11,7 +11,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 from ndetect.exceptions import handle_error
 from ndetect.logging import StructuredLogger, setup_logging
-from ndetect.models import MoveConfig, RetentionConfig, TextFile
+from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
 from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
@@ -158,11 +158,19 @@ def main(argv: Optional[List[str]] = None) -> int:
             dry_run=args.dry_run,
         )
 
+        preview_config = PreviewConfig(
+            max_chars=args.preview_chars,
+            max_lines=args.preview_lines,
+        )
+
         # Get the base directory from the first provided path
         base_dir = Path(args.paths[0]).parent if len(args.paths) == 1 else Path.cwd()
 
         ui = InteractiveUI(
-            console=console, move_config=move_config, retention_config=retention_config
+            console=console,
+            move_config=move_config,
+            preview_config=preview_config,
+            retention_config=retention_config,
         )
 
         text_files = scan_paths(

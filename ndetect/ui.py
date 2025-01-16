@@ -14,6 +14,7 @@ from rich.table import Table
 from ndetect.logging import setup_logging
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
 from ndetect.operations import MoveOperation, prepare_moves, select_keeper
+from ndetect.utils import format_preview_text
 
 
 class InteractiveUI:
@@ -177,12 +178,24 @@ class InteractiveUI:
     def show_preview(self, files: List[Path]) -> None:
         """Show preview of file contents."""
         self.logger.info_with_fields(
-            "Showing file preview", operation="preview", files=[str(f) for f in files]
+            "Showing file preview",
+            operation="preview",
+            files=[str(f) for f in files],
+            max_chars=self.preview_config.max_chars,
+            max_lines=self.preview_config.max_lines,
         )
+
         for file in files:
             try:
-                content = file.read_text()[: self.preview_config.max_chars]
+                content = format_preview_text(
+                    text=file.read_text(),
+                    max_lines=self.preview_config.max_lines,
+                    max_chars=self.preview_config.max_chars,
+                    truncation_marker=self.preview_config.truncation_marker,
+                )
+
                 self.console.print(Panel(content, title=str(file), border_style="blue"))
+
             except Exception as e:
                 self.logger.error_with_fields(
                     "Failed to preview file",
