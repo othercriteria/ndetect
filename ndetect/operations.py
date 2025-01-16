@@ -1,14 +1,16 @@
 """File operations for ndetect."""
 
 import logging
-import os
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import List, Optional
 
 from ndetect.models import RetentionConfig
+
+from .exceptions import FileOperationError, PermissionError
+from .utils import check_disk_space, get_total_size
 
 logger = logging.getLogger(__name__)
 
@@ -60,60 +62,95 @@ def select_keeper(
 def prepare_moves(
     files: List[Path],
     holding_dir: Path,
-    preserve_structure: bool,
-    group_id: int,
+    preserve_structure: bool = True,
+    group_id: int = 0,
     base_dir: Optional[Path] = None,
     retention_config: Optional[RetentionConfig] = None,
 ) -> List[MoveOperation]:
     """Prepare move operations for a group of files."""
-    if retention_config:
-        # Keep one file based on retention criteria
-        keeper = select_keeper(files, retention_config, base_dir)
-        files_to_move = [f for f in files if f != keeper]
-    else:
-        files_to_move = files
+    if not files:
+        return []
 
+    # Select which file to keep based on retention config
+    keeper = select_keeper(files, retention_config or RetentionConfig(), base_dir)
+
+    # Create moves for all files except the keeper
     moves: List[MoveOperation] = []
-    used_names: Set[Path] = set()
+    for file in files:
+        if file == keeper:
+            continue
 
-    # If preserving structure, determine base directory
-    if preserve_structure and files and not base_dir:
-        base_dir = Path(os.path.commonpath([str(f) for f in files]))
-
-    for file in files_to_move:
         if preserve_structure and base_dir:
+            # Preserve directory structure relative to base_dir
             try:
                 rel_path = file.relative_to(base_dir)
-                dest = holding_dir / rel_path
+                destination = holding_dir / rel_path
             except ValueError:
-                dest = holding_dir / file.name
+                # If file is not under base_dir, use just the filename
+                destination = holding_dir / file.name
         else:
-            dest = holding_dir / file.name
+            destination = holding_dir / file.name
 
-        # Handle name conflicts
-        base_dest = dest
-        counter = 1
-        while dest in used_names:
-            dest = base_dest.parent / f"{base_dest.stem}_{counter}{base_dest.suffix}"
-            counter += 1
-
-        used_names.add(dest)
-        moves.append(MoveOperation(source=file, destination=dest, group_id=group_id))
+        moves.append(
+            MoveOperation(
+                source=file,
+                destination=destination,
+                group_id=group_id,
+            )
+        )
 
     return moves
 
 
 def execute_moves(moves: List[MoveOperation]) -> None:
-    """Execute the move operations."""
-    for move in moves:
-        # Create parent directories if they don't exist
-        move.destination.parent.mkdir(parents=True, exist_ok=True)
+    """Execute move operations with enhanced error handling."""
+    if not moves:
+        return
 
+    # Pre-flight checks
+    source_files = [m.source for m in moves]
+    total_size = get_total_size(source_files)
+
+    # Group moves by destination directory
+    by_dest: dict[Path, list[MoveOperation]] = {}
+    for move in moves:
+        dest_dir = move.destination.parent
+        by_dest.setdefault(dest_dir, []).append(move)
+
+    # Check disk space on first destination directory
+    # (assumes all destinations are on same filesystem)
+    if by_dest:
+        first_dest = next(iter(by_dest))
+        check_disk_space(first_dest, total_size)
+
+    # Execute moves with rollback capability
+    completed: List[MoveOperation] = []
+    try:
+        for move in moves:
+            try:
+                # Create parent directories if needed
+                move.destination.parent.mkdir(parents=True, exist_ok=True)
+                # Attempt the move
+                shutil.move(str(move.source), str(move.destination))
+                completed.append(move)
+            except PermissionError as err:
+                raise PermissionError(str(move.source), "move") from err
+            except OSError as err:
+                raise FileOperationError(str(err), str(move.source), "move") from err
+    except Exception as e:
+        # Attempt rollback of completed moves
+        logger.error("Move operation failed, attempting rollback: %s", e)
+        rollback_moves(completed)
+        raise
+
+
+def rollback_moves(completed_moves: List[MoveOperation]) -> None:
+    """Attempt to rollback completed moves."""
+    for move in reversed(completed_moves):
         try:
-            shutil.move(str(move.source), str(move.destination))
-            logger.info("Moved %s to %s", move.source, move.destination)
+            shutil.move(str(move.destination), str(move.source))
+            logger.info("Rolled back move: %s -> %s", move.destination, move.source)
         except OSError as e:
             logger.error(
-                "Failed to move %s to %s: %s", move.source, move.destination, e
+                "Failed to rollback move %s -> %s: %s", move.destination, move.source, e
             )
-            raise

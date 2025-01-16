@@ -11,6 +11,7 @@ from typing import List, Optional
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
+from ndetect.exceptions import handle_error
 from ndetect.logging import setup_logging
 from ndetect.models import MoveConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
@@ -142,29 +143,29 @@ def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI."""
     args = parse_args(argv if argv is not None else None)
     setup_logging(args.log_file, args.verbose)
-
-    # Create configurations
-    retention_config = RetentionConfig(
-        strategy=args.retention,
-        priority_paths=args.priority_paths or [],
-        priority_first=args.priority_first,
-    )
-
-    move_config = MoveConfig(
-        holding_dir=args.holding_dir or Path("duplicates"),
-        preserve_structure=True,
-        dry_run=args.dry_run,
-    )
-
-    # Get the base directory from the first provided path
-    base_dir = Path(args.paths[0]).parent if len(args.paths) == 1 else Path.cwd()
-
     console = Console()
-    ui = InteractiveUI(
-        console=console, move_config=move_config, retention_config=retention_config
-    )
 
     try:
+        # Create configurations
+        retention_config = RetentionConfig(
+            strategy=args.retention,
+            priority_paths=args.priority_paths or [],
+            priority_first=args.priority_first,
+        )
+
+        move_config = MoveConfig(
+            holding_dir=args.holding_dir or Path("duplicates"),
+            preserve_structure=True,
+            dry_run=args.dry_run,
+        )
+
+        # Get the base directory from the first provided path
+        base_dir = Path(args.paths[0]).parent if len(args.paths) == 1 else Path.cwd()
+
+        ui = InteractiveUI(
+            console=console, move_config=move_config, retention_config=retention_config
+        )
+
         text_files = scan_paths(
             args.paths,
             min_printable_ratio=args.min_printable_ratio,
@@ -184,9 +185,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 console=console,
                 text_files=text_files,
                 threshold=args.threshold,
+                base_dir=base_dir,
+                holding_dir=args.holding_dir,
                 dry_run=args.dry_run,
                 log_file=args.log_file,
-                base_dir=base_dir,
                 retention_config=retention_config,
             )
 
@@ -197,8 +199,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         console.print("\n[yellow]Operation cancelled by user.[/yellow]")
         return 130
     except Exception as e:
-        console.print(f"[red]Error: {e}[/red]")
-        return 1
+        return handle_error(console, e)
 
 
 def build_similarity_graph(
@@ -270,46 +271,46 @@ def handle_interactive_mode(
             graph.remove_group(groups[0].files)
 
 
-def handle_non_interactive_mode(
-    console: Console,
-    text_files: List["TextFile"],
-    threshold: float,
-    dry_run: bool = False,
-    log_file: Optional[Path] = None,
-    base_dir: Optional[Path] = None,
-    retention_config: Optional[RetentionConfig] = None,
-) -> int:
-    """Handle non-interactive mode with automated processing."""
+def setup_non_interactive_logging(log_file: Optional[Path]) -> logging.Logger:
+    """Configure logging for non-interactive mode."""
     logger = logging.getLogger("ndetect")
+    if log_file:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(str(log_file))
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        logger.addHandler(file_handler)
+        logger.setLevel(logging.INFO)
+    return logger
 
-    # Create similarity graph
-    graph = SimilarityGraph(threshold=threshold)
 
-    with console.status("[bold green]Analyzing file similarities..."):
-        graph.add_files(text_files)
-
-    # Get groups of similar files
+def process_similar_groups(
+    console: Console,
+    graph: SimilarityGraph,
+    base_dir: Optional[Path],
+    holding_dir: Path,
+    retention_config: Optional[RetentionConfig],
+    dry_run: bool,
+    logger: logging.Logger,
+) -> List[MoveOperation]:
+    """Process groups of similar files and prepare moves."""
     groups = graph.get_groups()
-
     if not groups:
         console.print("[yellow]No similar files found[/yellow]")
-        return 0
+        return []
 
     all_moves: List[MoveOperation] = []
-    total_moves = 0
-
-    # Process each group
     for i, group in enumerate(groups, 1):
         moves = prepare_moves(
             files=group.files,
-            holding_dir=Path("duplicates") / f"group_{i}",
+            holding_dir=holding_dir / f"group_{i}",
             preserve_structure=True,
             group_id=i,
             base_dir=base_dir,
             retention_config=retention_config,
         )
 
-        # Preview moves
         for move in moves:
             rel_src = move.source.relative_to(base_dir) if base_dir else move.source
             rel_dst = move.destination
@@ -323,27 +324,58 @@ def handle_non_interactive_mode(
                 console.print(msg)
 
         all_moves.extend(moves)
-        total_moves += len(moves)
 
-    # Summary
-    console.print(f"\nTotal: {total_moves} files in {len(groups)} groups")
+    return all_moves
 
-    # Execute moves if not in dry run mode
-    if not dry_run and all_moves:
-        with console.status("[bold green]Moving files..."):
-            try:
-                execute_moves(all_moves)
-                console.print("[green]Successfully moved all files[/green]")
-            except OSError as e:
-                logger.error("Failed to move files: %s", e)
-                console.print("[red]Error: Failed to move files[/red]")
-                return 1
 
-    # Generate report if log file is specified
-    if log_file:
-        logger.info("Operation complete. Full details in: %s", log_file)
+def handle_non_interactive_mode(
+    console: Console,
+    text_files: List["TextFile"],
+    threshold: float,
+    base_dir: Optional[Path] = None,
+    holding_dir: Optional[Path] = None,
+    dry_run: bool = False,
+    log_file: Optional[Path] = None,
+    retention_config: Optional[RetentionConfig] = None,
+) -> int:
+    """Handle non-interactive mode with automated processing."""
+    logger = setup_non_interactive_logging(log_file)
+    holding_dir = holding_dir or Path("duplicates")
 
-    return 0
+    try:
+        with console.status("[bold green]Analyzing file similarities..."):
+            graph = SimilarityGraph(threshold=threshold)
+            graph.add_files(text_files)
+
+        all_moves = process_similar_groups(
+            console=console,
+            graph=graph,
+            base_dir=base_dir,
+            holding_dir=holding_dir,
+            retention_config=retention_config,
+            dry_run=dry_run,
+            logger=logger,
+        )
+
+        if not all_moves:
+            return 0
+
+        if dry_run:
+            console.print(f"\nWould move {len(all_moves)} files")
+            return 0
+
+        try:
+            execute_moves(all_moves)
+            console.print(f"\n[green]Successfully moved {len(all_moves)} files[/green]")
+            return 0
+        except Exception as e:
+            return handle_error(console, e)
+
+    finally:
+        if log_file:
+            for handler in logger.handlers[:]:
+                handler.close()
+                logger.removeHandler(handler)
 
 
 def handle_cleanup_phase(ui: InteractiveUI) -> int:
