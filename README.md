@@ -4,6 +4,21 @@
 
 (AI slop logo; disregard the "TM"!)
 
+## Quickstart
+
+### Install
+
+Assume you have a working Nix/flake/direnv setup.
+
+```bash
+git clone git@github.com:othercriteria/ndetect.git
+cd ndetect
+direnv allow
+ndetect .
+```
+
+There are enough text files in the repo to get started using the interactive mode.
+
 ## Core Behavior
 
 ### 1. Identify Near-Duplicates
