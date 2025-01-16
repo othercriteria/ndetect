@@ -146,3 +146,102 @@ def test_delete_files_nonexistent(tmp_path: Path) -> None:
     error_msg = str(exc_info.value)
     assert "delete failed" in error_msg.lower()
     assert str(nonexistent) in error_msg
+
+
+def test_select_keeper_oldest(tmp_path: Path) -> None:
+    """Test selecting oldest file as keeper."""
+    file1 = tmp_path / "old.txt"
+    file2 = tmp_path / "new.txt"
+
+    file1.write_text("old")
+    file2.write_text("new")
+
+    # Set different modification times
+    os.utime(file1, (1000000, 1000000))
+    os.utime(file2, (2000000, 2000000))
+
+    config = RetentionConfig(strategy="oldest")
+    keeper = select_keeper([file1, file2], config)
+    assert keeper == file1
+
+
+def test_select_keeper_largest(tmp_path: Path) -> None:
+    """Test selecting largest file as keeper."""
+    file1 = tmp_path / "small.txt"
+    file2 = tmp_path / "large.txt"
+
+    file1.write_text("small")
+    file2.write_text("large content")
+
+    config = RetentionConfig(strategy="largest")
+    keeper = select_keeper([file1, file2], config)
+    assert keeper == file2
+
+
+def test_select_keeper_smallest(tmp_path: Path) -> None:
+    """Test selecting smallest file as keeper."""
+    file1 = tmp_path / "small.txt"
+    file2 = tmp_path / "large.txt"
+
+    file1.write_text("small")
+    file2.write_text("large content")
+
+    config = RetentionConfig(strategy="smallest")
+    keeper = select_keeper([file1, file2], config)
+    assert keeper == file1
+
+
+def test_select_keeper_shortest_path_with_base_dir(tmp_path: Path) -> None:
+    """Test selecting file with shortest path relative to base_dir."""
+    nested_dir = tmp_path / "nested" / "path"
+    nested_dir.mkdir(parents=True)
+
+    file1 = tmp_path / "direct.txt"
+    file2 = nested_dir / "nested.txt"
+
+    file1.write_text("content")
+    file2.write_text("content")
+
+    config = RetentionConfig(strategy="shortest_path")
+    keeper = select_keeper([file1, file2], config, base_dir=tmp_path)
+    assert keeper == file1
+
+
+def test_select_keeper_shortest_path_without_base_dir(tmp_path: Path) -> None:
+    """Test selecting file with shortest absolute path."""
+    nested_dir = tmp_path / "nested" / "path"
+    nested_dir.mkdir(parents=True)
+
+    file1 = tmp_path / "direct.txt"
+    file2 = nested_dir / "nested.txt"
+
+    file1.write_text("content")
+    file2.write_text("content")
+
+    config = RetentionConfig(strategy="shortest_path")
+    keeper = select_keeper([file1, file2], config)
+    assert keeper == file1
+
+
+def test_select_keeper_empty_files() -> None:
+    """Test selecting keeper with empty file list."""
+    config = RetentionConfig(strategy="newest")
+    with pytest.raises(ValueError, match="No files provided"):
+        select_keeper([], config)
+
+
+def test_select_keeper_invalid_strategy_validation(tmp_path: Path) -> None:
+    """Test that RetentionConfig validates strategies."""
+    with pytest.raises(ValueError, match="Invalid strategy. Must be one of:"):
+        RetentionConfig(strategy="invalid_strategy")
+
+
+def test_select_keeper_all_strategies(tmp_path: Path) -> None:
+    """Test that all valid strategies work without error."""
+    file1 = tmp_path / "test1.txt"
+    file1.write_text("content")
+
+    for strategy in RetentionConfig.VALID_STRATEGIES:
+        config = RetentionConfig(strategy=strategy)
+        keeper = select_keeper([file1], config)
+        assert keeper == file1
