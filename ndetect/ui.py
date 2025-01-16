@@ -176,14 +176,6 @@ class InteractiveUI:
             )
         )
 
-    def prompt_action(self) -> Action:
-        """Alias for prompt_for_action for backward compatibility."""
-        return self.prompt_for_action()
-
-    def confirm_action(self, message: str) -> bool:
-        """Alias for confirm for backward compatibility."""
-        return self.confirm(message)
-
     def show_preview(self, files: List[Path]) -> None:
         """Show preview of file contents."""
         self.logger.info_with_fields(
