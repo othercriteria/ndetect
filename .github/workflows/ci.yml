@@ -22,6 +22,10 @@ jobs:
     - name: Lint with ruff
       run: ruff check .
     - name: Type check with mypy
-      run: mypy .
+      run: |
+        # Clear mypy cache first
+        rm -rf .mypy_cache
+        mypy --version
+        mypy .
     - name: Test with pytest
       run: pytest
