@@ -4,10 +4,11 @@ import logging
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from pathlib import Path
-from typing import Iterator, List, Optional, Set
+from typing import List, Optional, Set
 
 from ndetect.analysis import FileAnalyzer, FileAnalyzerConfig
 from ndetect.models import TextFile
+from ndetect.types import FileIterator
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +20,7 @@ def _analyze_file(args: tuple[Path, FileAnalyzerConfig]) -> Optional[TextFile]:
     return analyzer.analyze_file(path)
 
 
-def _collect_files(paths: List[str]) -> Iterator[Path]:
+def _collect_files(paths: List[str]) -> FileIterator:
     """Collect all files from given paths."""
     for path_str in paths:
         path = Path(path_str)

@@ -7,7 +7,7 @@ import networkx as nx
 
 from ndetect.minhash import similarity
 from ndetect.models import TextFile
-from ndetect.types import MinHashSignature, SimilarGroup
+from ndetect.types import MinHashSignature, SimilarGroup, SimilarityPair
 from ndetect.types import SimilarityGraph as SimilarityGraphType
 
 
@@ -31,9 +31,9 @@ class SimilarityGraph:
 
     def _compute_pairwise_similarities(
         self, files: List[TextFile]
-    ) -> List[Tuple[Path, Path, float]]:
+    ) -> List[SimilarityPair]:
         """Compute pairwise similarities between files."""
-        similarities: List[Tuple[Path, Path, float]] = []
+        similarities: List[SimilarityPair] = []
 
         for i, file1 in enumerate(files):
             if not file1.has_signature() or file1.signature is None:

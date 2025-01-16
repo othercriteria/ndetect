@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import List, NewType, TypeAlias
+from typing import Any, Dict, Iterator, List, NewType, Tuple, TypeAlias
 
 import networkx as nx
 
@@ -13,6 +13,11 @@ SimilarityScore = NewType("SimilarityScore", float)
 
 # A weighted graph where nodes are file paths and edges have similarity weights
 SimilarityGraph: TypeAlias = "nx.Graph[Path]"
+
+# Common type aliases
+JsonDict: TypeAlias = Dict[str, Any]
+FileIterator: TypeAlias = Iterator[Path]
+SimilarityPair: TypeAlias = Tuple[Path, Path, float]
 
 
 @dataclass

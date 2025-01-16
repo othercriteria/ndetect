@@ -4,7 +4,9 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
+
+from ndetect.types import JsonDict
 
 
 class JsonFormatter(logging.Formatter):
@@ -13,7 +15,7 @@ class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         """Format the log record as JSON."""
         # Base log entry with standard fields
-        log_entry: Dict[str, Any] = {
+        log_entry: JsonDict = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
             "level": record.levelname,
             "logger": record.name,
