@@ -1,5 +1,6 @@
 """File operations for ndetect."""
 
+import builtins
 import shutil
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -223,3 +224,57 @@ def rollback_moves(moves: List[MoveOperation]) -> None:
                     source=str(move.source),
                     destination=str(move.destination),
                 )
+
+
+def delete_files(files: List[Path]) -> None:
+    """Delete files with structured logging and error handling."""
+    if not files:
+        return
+
+    logger.info_with_fields(
+        "Starting delete operations",
+        operation="delete_batch",
+        total_files=len(files),
+    )
+
+    deleted_files: List[Path] = []
+
+    try:
+        for file in files:
+            try:
+                logger.debug_with_fields(
+                    f"Deleting file {file}",
+                    operation="delete",
+                    file=str(file),
+                    file_size=file.stat().st_size,
+                )
+
+                file.unlink()
+                deleted_files.append(file)
+
+            except OSError as e:
+                logger.error_with_fields(
+                    "File deletion failed",
+                    operation="delete",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    file=str(file),
+                )
+
+                # Use our custom PermissionError
+                if isinstance(e, builtins.PermissionError):
+                    raise PermissionError(str(file), "delete") from e
+                # Wrap other OSErrors in FileOperationError
+                raise FileOperationError(str(e), str(file), "delete") from e
+
+    except Exception as e:
+        # Only log non-OSError exceptions at the top level
+        if not isinstance(e, (PermissionError, FileOperationError)):
+            logger.error_with_fields(
+                "File deletion failed",
+                operation="delete",
+                error=str(e),
+                error_type=type(e).__name__,
+                file=str(files[0]) if files else None,
+            )
+        raise

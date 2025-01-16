@@ -1,13 +1,16 @@
+import builtins
 import os
 import shutil
 from pathlib import Path
 from typing import Any, List
 
+import pytest
 from rich.console import Console
 
 from ndetect.cli import handle_non_interactive_mode
+from ndetect.exceptions import FileOperationError, PermissionError
 from ndetect.models import RetentionConfig, TextFile
-from ndetect.operations import MoveOperation, select_keeper
+from ndetect.operations import MoveOperation, delete_files, select_keeper
 
 
 def test_select_keeper_newest(tmp_path: Path) -> None:
@@ -100,3 +103,58 @@ def test_non_interactive_mode_with_retention(
     # Verify one file was moved to duplicates
     moved_files = list(duplicates_dir.glob("**/*.txt"))
     assert len(moved_files) == 1
+
+
+def test_delete_files(tmp_path: Path) -> None:
+    """Test deleting files."""
+    # Create test files
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    files = [file1, file2]
+    delete_files(files)
+
+    # Verify files were deleted
+    assert not file1.exists()
+    assert not file2.exists()
+
+
+def test_delete_files_permission_error(tmp_path: Path, monkeypatch: Any) -> None:
+    """Test handling of permission errors during delete."""
+    file = tmp_path / "test.txt"
+    file.write_text("content")
+
+    def mock_unlink(*args: Any) -> None:
+        raise builtins.PermissionError("Permission denied")
+
+    monkeypatch.setattr(Path, "unlink", mock_unlink)
+
+    with pytest.raises(PermissionError) as exc_info:
+        delete_files([file])
+
+    error_msg = str(exc_info.value)
+    # Check that the error contains the expected components
+    assert "delete failed" in error_msg
+    assert str(file) in error_msg
+    # The original error message is included
+    assert "Permission denied" in error_msg
+
+
+def test_delete_files_empty_list() -> None:
+    """Test deleting empty list of files."""
+    # Should not raise any errors
+    delete_files([])
+
+
+def test_delete_files_nonexistent(tmp_path: Path) -> None:
+    """Test deleting nonexistent files."""
+    nonexistent = tmp_path / "nonexistent.txt"
+
+    with pytest.raises(FileOperationError) as exc_info:
+        delete_files([nonexistent])
+
+    error_msg = str(exc_info.value)
+    assert "delete failed" in error_msg.lower()
+    assert str(nonexistent) in error_msg

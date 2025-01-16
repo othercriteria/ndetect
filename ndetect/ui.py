@@ -15,7 +15,7 @@ from rich.text import Text
 from ndetect.exceptions import DiskSpaceError, FileOperationError, PermissionError
 from ndetect.logging import setup_logging
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
-from ndetect.operations import MoveOperation, prepare_moves, select_keeper
+from ndetect.operations import MoveOperation, delete_files, prepare_moves, select_keeper
 from ndetect.types import Action
 from ndetect.utils import format_preview_text
 
@@ -318,3 +318,36 @@ class InteractiveUI:
         self.console.print(
             Panel(table, title="Pairwise Similarities", border_style="blue")
         )
+
+    def handle_delete(self, files: List[Path]) -> None:
+        """Handle file deletion with confirmation."""
+        try:
+            if not files:
+                return
+
+            self.logger.info_with_fields(
+                "Preparing delete operation",
+                operation="delete_prepare",
+                files=[str(f) for f in files],
+            )
+
+            # Show preview of files to be deleted
+            table = Table(show_header=True, header_style="bold red")
+            table.add_column("Files to Delete", style="red")
+            for file in files:
+                table.add_row(str(file))
+
+            self.console.print(Panel(table, title="Delete Preview", border_style="red"))
+
+            if not self.confirm("Are you sure you want to delete these files?"):
+                self.logger.info_with_fields(
+                    "Delete operation cancelled by user",
+                    operation="delete_cancel",
+                )
+                return
+
+            delete_files(files)
+            self.show_success(f"Successfully deleted {len(files)} files")
+
+        except FileOperationError as e:
+            self.handle_file_operation_error(e, "delete")

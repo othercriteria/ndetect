@@ -233,22 +233,28 @@ def process_group(
 
     while True:
         action = ui.prompt_for_action()
-
-        if action == Action.PREVIEW:
-            ui.show_preview(group.files)
-        elif action == Action.SIMILARITIES:
-            similarities = graph.get_group_similarities(group.files)
-            ui.show_similarities(group.files, similarities)
-        elif action == Action.MOVE:
-            selected = ui.select_files(group.files, "Select files to move")
-            if selected:
-                moves = ui.create_moves(selected, group_id=group.id)
-                ui.pending_moves.extend(moves)
-                return Action.KEEP
-        elif action == Action.DELETE:
-            ui.show_error("Delete operation not implemented yet")
-        elif action in (Action.KEEP, Action.QUIT):
-            return action
+        match action:
+            case Action.DELETE:
+                files = ui.select_files(group.files, "Select files to delete")
+                if files:
+                    ui.handle_delete(files)
+                    graph.remove_files(files)
+                return action
+            case Action.PREVIEW:
+                ui.show_preview(group.files)
+            case Action.SIMILARITIES:
+                similarities = graph.get_group_similarities(group.files)
+                ui.show_similarities(group.files, similarities)
+            case Action.MOVE:
+                selected = ui.select_files(group.files, "Select files to move")
+                if selected:
+                    moves = ui.create_moves(selected, group_id=group.id)
+                    ui.pending_moves.extend(moves)
+                    return Action.KEEP
+            case Action.KEEP:
+                return action
+            case Action.QUIT:
+                return action
 
     return Action.KEEP
 
