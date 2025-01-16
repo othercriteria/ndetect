@@ -26,7 +26,7 @@ jobs:
     - name: Install markdownlint
       run: npm install -g markdownlint-cli
     - name: Lint markdown files
-      run: markdownlint --fix "**/*.md"
+      run: markdownlint --fix "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "docs/**/*.md" ".github/**/*.md"
     - name: Lint with ruff
       run: ruff check .
     - name: Type check with mypy

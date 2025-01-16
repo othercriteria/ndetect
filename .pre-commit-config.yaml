@@ -37,3 +37,11 @@ repos:
     hooks:
       - id: markdownlint
         args: ["--fix"]
+        files: |
+          (?x)^(
+            README\.md|
+            CHANGELOG\.md|
+            CONTRIBUTING\.md|
+            docs/.*\.md|
+            \.github/.*\.md
+          )$

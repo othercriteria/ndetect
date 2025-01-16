@@ -50,10 +50,27 @@ The daemon is automatically:
 - Used by pre-commit hooks
 - Configured via settings in pyproject.toml
 
+### Markdown Files
+
+The following markdown files are linted:
+
+- `README.md`
+- `CHANGELOG.md`
+- `CONTRIBUTING.md`
+- `docs/**/*.md`
+- `.github/**/*.md`
+
+You can run the linter manually with:
+
+```bash
+make lint-md # check for issues
+make fix-md  # fix issues
+```
+
 ## Running Tests
 
 ```bash
-pytest
+make test # check for issues
 ```
 
 ## Before Submitting a Pull Request

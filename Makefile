@@ -16,10 +16,10 @@ format:
 	ruff check --fix .
 
 lint-md:
-	markdownlint "**/*.md"
+	markdownlint "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "docs/**/*.md" ".github/**/*.md"
 
 fix-md:
-	markdownlint --fix "**/*.md"
+	markdownlint --fix "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "docs/**/*.md" ".github/**/*.md"
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache/ .mypy_cache/ .ruff_cache/
