@@ -3,7 +3,7 @@
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.panel import Panel
@@ -14,6 +14,7 @@ from rich.table import Table
 from ndetect.logging import setup_logging
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
 from ndetect.operations import MoveOperation, prepare_moves, select_keeper
+from ndetect.types import Action
 from ndetect.utils import format_preview_text
 
 
@@ -84,11 +85,19 @@ class InteractiveUI:
 
         self.console.print(table)
 
-    def prompt_for_action(self) -> str:
+    def prompt_for_action(self) -> Action:
         """Prompt for user action."""
-        return Prompt.ask(
-            "\nChoose action", choices=["k", "d", "m", "i", "q"], default="k"
+        choice = Prompt.ask(
+            "\nChoose action", choices=["k", "d", "m", "p", "s", "q"], default="k"
         )
+        return {
+            "k": Action.KEEP,
+            "d": Action.DELETE,
+            "m": Action.MOVE,
+            "p": Action.PREVIEW,
+            "s": Action.SIMILARITIES,
+            "q": Action.QUIT,
+        }[choice]
 
     def select_files(
         self, files: List[Path], prompt: str = "Select files"
@@ -167,7 +176,7 @@ class InteractiveUI:
             )
         )
 
-    def prompt_action(self) -> str:
+    def prompt_action(self) -> Action:
         """Alias for prompt_for_action for backward compatibility."""
         return self.prompt_for_action()
 
@@ -234,3 +243,19 @@ class InteractiveUI:
             table.add_row(str(move.source), str(move.destination))
 
         self.console.print(Panel(table, title="Move Preview", border_style="blue"))
+
+    def show_similarities(
+        self, group_files: List[Path], similarities: Dict[Tuple[Path, Path], float]
+    ) -> None:
+        """Show pairwise similarities between files in a group."""
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("File 1", style="cyan")
+        table.add_column("File 2", style="cyan")
+        table.add_column("Similarity", justify="right", style="green")
+
+        for (file1, file2), sim in similarities.items():
+            table.add_row(str(file1), str(file2), f"{sim:.2%}")
+
+        self.console.print(
+            Panel(table, title="Pairwise Similarities", border_style="blue")
+        )

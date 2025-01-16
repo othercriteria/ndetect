@@ -15,7 +15,7 @@ from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
 from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
-from ndetect.types import SimilarGroup
+from ndetect.types import Action, SimilarGroup
 from ndetect.ui import InteractiveUI
 
 __all__ = [
@@ -227,27 +227,30 @@ def build_similarity_graph(
 
 def process_group(
     ui: InteractiveUI, graph: SimilarityGraph, group: SimilarGroup
-) -> str:
+) -> Action:
     """Process a group of similar files."""
     ui.display_group(group.id, group.files, group.similarity)
 
     while True:
         action = ui.prompt_for_action()
 
-        if action == "i":
+        if action == Action.PREVIEW:
             ui.show_preview(group.files)
-        elif action == "m":
+        elif action == Action.SIMILARITIES:
+            similarities = graph.get_group_similarities(group.files)
+            ui.show_similarities(group.files, similarities)
+        elif action == Action.MOVE:
             selected = ui.select_files(group.files, "Select files to move")
             if selected:
                 moves = ui.create_moves(selected, group_id=group.id)
                 ui.pending_moves.extend(moves)
-                return "k"
-        elif action == "d":
+                return Action.KEEP
+        elif action == Action.DELETE:
             ui.show_error("Delete operation not implemented yet")
-        elif action in ["k", "q"]:
+        elif action in (Action.KEEP, Action.QUIT):
             return action
 
-    return "k"
+    return Action.KEEP
 
 
 def handle_interactive_mode(
@@ -295,10 +298,10 @@ def handle_interactive_mode(
             "Processing group", operation="group", group_size=len(groups[0].files)
         )
         action = process_group(ui, graph, groups[0])
-        if action == "q":
+        if action == Action.QUIT:
             logger.info_with_fields("User quit", operation="complete", status="quit")
             return 0
-        elif action == "k":
+        elif action == Action.KEEP:
             logger.info_with_fields(
                 "Group kept",
                 operation="group",

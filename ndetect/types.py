@@ -1,6 +1,7 @@
 """Type definitions for ndetect."""
 
 from dataclasses import dataclass
+from enum import Enum, auto
 from pathlib import Path
 from typing import List, NewType, TypeAlias
 
@@ -21,3 +22,14 @@ class SimilarGroup:
     id: int
     files: List[Path]
     similarity: float
+
+
+class Action(Enum):
+    """Available actions for processing file groups."""
+
+    KEEP = auto()  # Keep all files (k)
+    DELETE = auto()  # Delete selected files (d)
+    MOVE = auto()  # Move selected files (m)
+    PREVIEW = auto()  # Preview file contents (p)
+    SIMILARITIES = auto()  # Show similarities (s)
+    QUIT = auto()  # Quit program (q)
