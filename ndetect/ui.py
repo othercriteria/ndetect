@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ndetect.exceptions import DiskSpaceError, FileOperationError, PermissionError
-from ndetect.logging import setup_logging
+from ndetect.logging import StructuredLogger, get_logger
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
 from ndetect.operations import MoveOperation, delete_files, prepare_moves, select_keeper
 from ndetect.types import Action
@@ -29,13 +29,15 @@ class InteractiveUI:
         move_config: MoveConfig,
         preview_config: Optional[PreviewConfig] = None,
         retention_config: Optional[RetentionConfig] = None,
+        logger: Optional[StructuredLogger] = None,
     ) -> None:
+        """Initialize the UI."""
         self.console = console
         self.move_config = move_config
         self.preview_config = preview_config or PreviewConfig()
         self.retention_config = retention_config
         self.pending_moves: List[MoveOperation] = []
-        self.logger = setup_logging(None)  # Add logger instance
+        self.logger = logger or get_logger()  # Use passed logger or get global instance
 
     def show_scan_progress(self, paths: List[str]) -> None:
         """Show progress while scanning files."""

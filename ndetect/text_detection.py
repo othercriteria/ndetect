@@ -1,6 +1,5 @@
 """Text file detection and scanning functionality."""
 
-import logging
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
@@ -8,10 +7,11 @@ from pathlib import Path
 from typing import List, Optional
 
 from ndetect.analysis import FileAnalyzer
+from ndetect.logging import get_logger
 from ndetect.models import FileAnalyzerConfig, TextFile
 from ndetect.types import FileIterator
 
-logger = logging.getLogger(__name__)
+logger = get_logger()
 
 # Set the start method to 'spawn' to avoid fork-related warnings
 try:

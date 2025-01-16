@@ -12,6 +12,7 @@ from ndetect.cli import (
     scan_paths,
 )
 from ndetect.exceptions import FileOperationError
+from ndetect.logging import setup_logging
 from ndetect.models import MoveConfig, RetentionConfig, TextFile
 from ndetect.operations import execute_moves, prepare_moves
 from ndetect.similarity import SimilarityGraph
@@ -428,6 +429,10 @@ def test_non_interactive_mode_with_logging(tmp_path: Path) -> None:
 
     log_file = tmp_path / "test.log"
     console = Console(force_terminal=True)
+
+    # Setup logging before calling handle_non_interactive_mode
+    setup_logging(log_file=log_file)
+
     result = handle_non_interactive_mode(
         console=console,
         paths=[str(tmp_path)],
@@ -437,7 +442,12 @@ def test_non_interactive_mode_with_logging(tmp_path: Path) -> None:
         log_file=log_file,
     )
     assert result == 0
-    assert log_file.exists()
+    assert log_file.exists(), f"Log file {log_file} was not created"
+
+    # Verify log file contains content
+    log_content = log_file.read_text()
+    assert log_content, "Log file is empty"
+    assert "Starting non-interactive processing" in log_content
 
 
 def test_non_interactive_mode_no_duplicates(tmp_path: Path) -> None:

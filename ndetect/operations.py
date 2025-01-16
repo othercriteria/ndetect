@@ -7,14 +7,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
-from ndetect.logging import StructuredLogger, setup_logging
+from ndetect.logging import get_logger
 from ndetect.models import RetentionConfig
 
 from .exceptions import FileOperationError, PermissionError
 from .utils import check_disk_space, get_total_size
 
 # Get a properly typed logger instance
-logger: StructuredLogger = setup_logging(None)
+logger = get_logger()
 
 
 @dataclass

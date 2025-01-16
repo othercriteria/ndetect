@@ -10,13 +10,10 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
 from ndetect.exceptions import (
-    DiskSpaceError,
-    FileOperationError,
-    PermissionError,
     handle_error,
 )
-from ndetect.logging import StructuredLogger, setup_logging
-from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig, TextFile
+from ndetect.logging import StructuredLogger, get_logger, setup_logging
+from ndetect.models import FileAnalyzerConfig, MoveConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
 from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
@@ -164,88 +161,50 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI."""
     args = parse_args(argv if argv is not None else None)
-    setup_logging(args.log_file, args.verbose)
+
+    # Initialize global logger
+    logger = setup_logging(args.log_file, args.verbose)
+
     console = Console()
-
     try:
-        # Create configurations
-        retention_config = RetentionConfig(
-            strategy=args.retention,
-            priority_paths=args.priority_paths or [],
-            priority_first=args.priority_first,
-        )
-
-        move_config = MoveConfig(
-            holding_dir=args.holding_dir or Path("duplicates"),
-            preserve_structure=True,
-            dry_run=args.dry_run,
-        )
-
-        preview_config = PreviewConfig(
-            max_chars=args.preview_chars,
-            max_lines=args.preview_lines,
-        )
-
-        # Get the base directory from the first provided path
-        base_dir = Path(args.paths[0]).parent if len(args.paths) == 1 else Path.cwd()
-
-        ui = InteractiveUI(
-            console=console,
-            move_config=move_config,
-            preview_config=preview_config,
-            retention_config=retention_config,
-        )
-
-        text_files = scan_paths(
-            args.paths,
-            min_printable_ratio=args.min_printable_ratio,
-            num_perm=args.num_perm,
-            shingle_size=args.shingle_size,
-            follow_symlinks=args.follow_symlinks,
-            max_workers=args.max_workers,
-        )
-        if not text_files:
-            console.print("[red]No valid text files found.[/red]")
-            return 1
-
-        console.print(f"Found {len(text_files)} text files.")
-
         if args.mode == "interactive":
-            return handle_interactive_mode(ui, text_files, args.threshold)
-        elif args.mode == "non-interactive":
+            return handle_interactive_mode(
+                ui=InteractiveUI(
+                    console=console,
+                    move_config=MoveConfig(
+                        holding_dir=args.holding_dir,
+                        dry_run=args.dry_run,
+                    ),
+                    logger=logger,
+                ),
+                text_files=scan_paths(
+                    paths=args.paths,
+                    min_printable_ratio=args.min_printable_ratio,
+                    num_perm=args.num_perm,
+                    shingle_size=args.shingle_size,
+                    follow_symlinks=args.follow_symlinks,
+                    max_workers=args.max_workers,
+                ),
+                threshold=args.threshold,
+            )
+        else:
             return handle_non_interactive_mode(
                 console=console,
                 paths=args.paths,
                 threshold=args.threshold,
-                base_dir=base_dir,
+                base_dir=args.base_dir,
                 holding_dir=args.holding_dir,
+                retention_config=args.retention_config,
                 dry_run=args.dry_run,
                 log_file=args.log_file,
-                retention_config=retention_config,
+                verbose=args.verbose,
                 min_printable_ratio=args.min_printable_ratio,
                 num_perm=args.num_perm,
                 shingle_size=args.shingle_size,
                 follow_symlinks=args.follow_symlinks,
                 max_workers=args.max_workers,
             )
-
-        console.print("[red]Unknown mode specified.[/red]")
-        return 1
-
-    except KeyboardInterrupt:
-        console.print("\n[yellow]Operation cancelled by user.[/yellow]")
-        return 130
-    except FileOperationError as e:
-        # Handle file operation errors (read/write/move/delete)
-        return handle_error(console, e)
-    except PermissionError as e:
-        # Handle permission denied errors
-        return handle_error(console, e)
-    except DiskSpaceError as e:
-        # Handle insufficient disk space errors
-        return handle_error(console, e)
     except Exception as e:
-        # Handle any other unexpected errors
         return handle_error(console, e)
 
 
@@ -357,11 +316,6 @@ def handle_interactive_mode(
             graph.remove_group(groups[0].files)
 
 
-def setup_non_interactive_logging(log_file: Optional[Path]) -> StructuredLogger:
-    """Configure logging for non-interactive mode."""
-    return setup_logging(log_file=log_file)
-
-
 def process_similar_groups(
     console: Console,
     graph: SimilarityGraph,
@@ -423,41 +377,42 @@ def handle_non_interactive_mode(
     console: Console,
     paths: List[str],
     threshold: float,
-    base_dir: Optional[Path] = None,
-    holding_dir: Optional[Path] = None,
+    base_dir: Path,
+    holding_dir: Path,
+    retention_config: Optional[RetentionConfig] = None,
     dry_run: bool = False,
     log_file: Optional[Path] = None,
-    retention_config: Optional[RetentionConfig] = None,
+    verbose: bool = False,
     min_printable_ratio: float = 0.8,
     num_perm: int = 128,
     shingle_size: int = 5,
     follow_symlinks: bool = True,
     max_workers: Optional[int] = None,
 ) -> int:
-    """Handle non-interactive mode with automated processing."""
-    logger = setup_non_interactive_logging(log_file)
-    holding_dir = holding_dir or Path("duplicates")
+    """Handle non-interactive mode operations."""
+    logger = get_logger()
+    logger.info_with_fields("Starting non-interactive processing")
 
     try:
-        logger.info_with_fields(
-            "Starting non-interactive processing",
-            operation="start",
-            paths=paths,
-            threshold=threshold,
-            base_dir=str(base_dir) if base_dir else None,
-            holding_dir=str(holding_dir),
-            dry_run=dry_run,
+        # Create analyzer config
+        analyzer_config = FileAnalyzerConfig(
+            min_printable_ratio=min_printable_ratio,
+            num_perm=num_perm,
+            shingle_size=shingle_size,
+            follow_symlinks=follow_symlinks,
+            max_workers=max_workers,
         )
 
-        with console.status("[bold green]Scanning files..."):
-            text_files = scan_paths(
-                paths,
-                min_printable_ratio=min_printable_ratio,
-                num_perm=num_perm,
-                shingle_size=shingle_size,
-                follow_symlinks=follow_symlinks,
-                max_workers=max_workers,
-            )
+        # Scan files
+        text_files = scan_paths(
+            paths=paths,
+            min_printable_ratio=analyzer_config.min_printable_ratio,
+            num_perm=analyzer_config.num_perm,
+            shingle_size=analyzer_config.shingle_size,
+            follow_symlinks=analyzer_config.follow_symlinks,
+            max_workers=analyzer_config.max_workers,
+        )
+        logger.info_with_fields("File analysis complete")
 
         if not text_files:
             logger.info_with_fields(
@@ -465,76 +420,64 @@ def handle_non_interactive_mode(
                 operation="complete",
                 status="no_files",
             )
-            console.print("[red]No valid text files found.[/red]")
-            return 1
+            return 0
 
-        console.print(f"Found {len(text_files)} text files.")
+        # Find similar files using SimilarityGraph
+        graph = SimilarityGraph(threshold=threshold)
+        graph.add_files(text_files)
+        similar_groups = list(graph.get_groups())
 
-        with console.status("[bold green]Analyzing file similarities..."):
-            graph = SimilarityGraph(threshold=threshold)
-            graph.add_files(text_files)
+        if not similar_groups:
+            logger.info_with_fields(
+                "No similar files found",
+                operation="complete",
+                status="no_groups",
+            )
+            return 0
 
-        logger.info_with_fields(
-            "File analysis complete",
-            operation="analysis",
-            similar_groups=len(graph.get_groups()),
-        )
+        # Prepare moves for each group
+        all_moves = []
+        for group in similar_groups:
+            group_moves = prepare_moves(
+                group.files,
+                base_dir=base_dir,
+                holding_dir=holding_dir,
+                retention_config=retention_config,
+            )
+            all_moves.extend(group_moves)
 
-        all_moves = process_similar_groups(
-            console=console,
-            graph=graph,
-            base_dir=base_dir,
-            holding_dir=holding_dir,
-            retention_config=retention_config,
-            dry_run=dry_run,
-            logger=logger,
-        )
         if not all_moves:
             logger.info_with_fields(
-                "No moves to execute", operation="complete", status="no_moves"
-            )
-            return 0
-
-        if dry_run:
-            logger.info_with_fields(
-                "Dry run complete",
+                "No moves to execute",
                 operation="complete",
-                status="dry_run",
-                planned_moves=len(all_moves),
+                status="no_moves",
             )
-            console.print(f"\nWould move {len(all_moves)} files")
             return 0
 
-        try:
-            # Create holding directory and any necessary parent directories
-            holding_dir.mkdir(parents=True, exist_ok=True)
-
+        # Execute moves in non-interactive mode
+        if not dry_run:
             logger.info_with_fields(
-                "Executing moves", operation="move_start", total_moves=len(all_moves)
+                "Executing moves",
+                operation="move",
+                total_moves=len(all_moves),
             )
             execute_moves(all_moves)
             logger.info_with_fields(
                 "Moves completed successfully",
                 operation="complete",
                 status="success",
-                total_moves=len(all_moves),
             )
-            console.print(f"\n[green]Successfully moved {len(all_moves)} files[/green]")
-            return 0
-        except Exception as e:
-            logger.error_with_fields(
-                "Move operation failed",
-                operation="complete",
-                status="error",
-                error_type=type(e).__name__,
-                error_message=str(e),
-            )
-            return handle_error(console, e)
-    finally:
-        if log_file:
-            for handler in logger.handlers[:]:
-                handler.close()
-                logger.removeHandler(handler)
+
+        return 0
+
+    except Exception as e:
+        logger.error_with_fields(
+            "Error in non-interactive mode",
+            operation="error",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+        return handle_error(console, e)
 
 
 def handle_cleanup_phase(ui: InteractiveUI) -> int:

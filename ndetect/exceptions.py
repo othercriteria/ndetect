@@ -1,9 +1,9 @@
 from rich.console import Console
 from rich.panel import Panel
 
-from ndetect.logging import StructuredLogger, setup_logging
+from ndetect.logging import get_logger
 
-logger: StructuredLogger = setup_logging(None)
+logger = get_logger()
 
 
 class NDetectError(Exception):

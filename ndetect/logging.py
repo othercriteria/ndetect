@@ -4,9 +4,12 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from ndetect.types import JsonDict
+
+# Add global variable for logger instance
+_logger_instance: Optional["StructuredLogger"] = None
 
 
 class JsonFormatter(logging.Formatter):
@@ -69,9 +72,17 @@ class StructuredLogger(logging.Logger):
 logging.setLoggerClass(StructuredLogger)
 
 
+def get_logger() -> "StructuredLogger":
+    """Get or create the global logger instance."""
+    global _logger_instance
+    if _logger_instance is None:
+        _logger_instance = setup_logging()
+    return _logger_instance
+
+
 def setup_logging(
     log_file: Optional[Path] = None, verbose: bool = False
-) -> StructuredLogger:
+) -> "StructuredLogger":
     """
     Configure logging for ndetect.
 
@@ -82,8 +93,20 @@ def setup_logging(
     Returns:
         StructuredLogger: Configured logger with structured logging capabilities.
     """
-    # Create logger
-    logger = logging.getLogger("ndetect")
+    global _logger_instance
+    if _logger_instance is not None:
+        # If we have an existing logger but need to add a file handler
+        if log_file and not any(
+            isinstance(h, logging.FileHandler) for h in _logger_instance.handlers
+        ):
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setFormatter(JsonFormatter())
+            file_handler.setLevel(logging.DEBUG)
+            _logger_instance.addHandler(file_handler)
+        return _logger_instance
+
+    # Create logger and explicitly cast to StructuredLogger
+    logger = cast(StructuredLogger, logging.getLogger("ndetect"))
     logger.setLevel(logging.DEBUG if verbose else logging.INFO)
     logger.handlers = []  # Clear any existing handlers
 
@@ -105,4 +128,5 @@ def setup_logging(
         file_handler.setLevel(logging.DEBUG)
         logger.addHandler(file_handler)
 
-    return logger  # type: ignore[return-value]
+    _logger_instance = logger
+    return _logger_instance
