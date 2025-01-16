@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ndetect"
-version = "0.2.0"
+version = "0.3.0"
 description = "A CLI tool for detecting near-duplicate text files using MinHash"
 authors = [
     {name = "Daniel Klein", email = "othercriteria@gmail.com"},
@@ -42,7 +42,6 @@ lint.select = [
     "C",  # flake8-comprehensions
     "B",  # flake8-bugbear
 ]
-lint.ignore = ["E501"]  # Line length handled by black
 
 [tool.mypy]
 python_version = "3.12"

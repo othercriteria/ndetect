@@ -14,8 +14,8 @@ A clear and concise description of what the bug is.
 Steps to reproduce the behavior:
 
 1. Run command '...'
-2. With input '....'
-3. See error
+1. With input '....'
+1. See error
 
 **Expected behavior**
 A clear and concise description of what you expected to happen.

@@ -19,9 +19,21 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[dev]"
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - name: Install markdownlint
+      run: npm install -g markdownlint-cli
+    - name: Lint markdown files
+      run: markdownlint --fix "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "docs/**/*.md" ".github/**/*.md"
     - name: Lint with ruff
       run: ruff check .
     - name: Type check with mypy
-      run: mypy .
+      run: |
+        # Clear mypy cache first
+        rm -rf .mypy_cache
+        mypy --version
+        mypy .
     - name: Test with pytest
       run: pytest

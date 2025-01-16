@@ -1,4 +1,4 @@
-.PHONY: install test lint format clean
+.PHONY: install test lint format clean lint-md fix-md
 
 install:
 	pip install -e ".[dev]"
@@ -14,6 +14,12 @@ lint:
 
 format:
 	ruff check --fix .
+
+lint-md:
+	markdownlint "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "docs/**/*.md" ".github/**/*.md"
+
+fix-md:
+	markdownlint --fix "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "docs/**/*.md" ".github/**/*.md"
 
 clean:
 	rm -rf build/ dist/ *.egg-info .pytest_cache/ .mypy_cache/ .ruff_cache/
