@@ -288,10 +288,12 @@ def handle_interactive_mode(
                     total_moves=len(ui.pending_moves),
                 )
                 return handle_cleanup_phase(ui)
+            # Log completion for system tracking
             logger.info_with_fields(
-                "No more duplicate groups found", operation="complete", status="success"
+                "Finished processing all groups", operation="complete", status="success"
             )
-            ui.show_success("No more duplicate groups found.")
+            # Single user-facing message
+            ui.console.print("[green]No more duplicate groups found[/green]")
             return 0
 
         logger.info_with_fields(
