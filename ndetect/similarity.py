@@ -1,6 +1,5 @@
 """Similarity graph implementation for near-duplicate detection."""
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -8,26 +7,17 @@ import networkx as nx
 
 from ndetect.minhash import similarity
 from ndetect.models import TextFile
-from ndetect.types import MinHashSignature
+from ndetect.types import MinHashSignature, SimilarGroup
 from ndetect.types import SimilarityGraph as SimilarityGraphType
-
-
-@dataclass
-class Group:
-    """A group of similar files."""
-
-    id: int
-    files: List[Path]
-    similarity: float
 
 
 class SimilarityGraph:
     """Graph representation of file similarities."""
 
     def __init__(self, threshold: float = 0.8) -> None:
-        self.graph: SimilarityGraphType = nx.Graph()
+        """Initialize similarity graph."""
         self.threshold = threshold
-        # Cache for MinHash signatures
+        self.graph: SimilarityGraphType = nx.Graph()
         self._signature_cache: Dict[Path, MinHashSignature] = {}
         self._next_group_id = 1
 
@@ -90,9 +80,9 @@ class SimilarityGraph:
         for path1, path2, sim in similarities:
             self.graph.add_edge(path1, path2, weight=sim)
 
-    def get_groups(self) -> List[Group]:
+    def get_groups(self) -> List[SimilarGroup]:
         """Get all groups of similar files."""
-        groups: List[Group] = []
+        groups: List[SimilarGroup] = []
 
         # Find connected components (groups of similar files)
         components = list(nx.connected_components(self.graph))
@@ -114,7 +104,7 @@ class SimilarityGraph:
             )
 
             groups.append(
-                Group(
+                SimilarGroup(
                     id=self._next_group_id,
                     files=list(component),
                     similarity=avg_similarity,

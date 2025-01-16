@@ -2,9 +2,7 @@
 
 import argparse
 import logging
-import shutil
 import sys
-from collections import defaultdict
 from pathlib import Path
 from typing import List, Optional
 
@@ -15,8 +13,9 @@ from ndetect.exceptions import handle_error
 from ndetect.logging import StructuredLogger, setup_logging
 from ndetect.models import MoveConfig, RetentionConfig, TextFile
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
-from ndetect.similarity import Group, SimilarityGraph
+from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
+from ndetect.types import SimilarGroup
 from ndetect.ui import InteractiveUI
 
 __all__ = [
@@ -219,28 +218,28 @@ def build_similarity_graph(
 
 
 def process_group(
-    ui: InteractiveUI, graph: SimilarityGraph, group: Group
-) -> Optional[str]:
-    """Process a single group of similar files. Returns action if it's a quit command."""
-    while True:
-        ui.display_group(group.id, group.files, group.similarity)
-        action = ui.prompt_action()
+    ui: InteractiveUI, graph: SimilarityGraph, group: SimilarGroup
+) -> str:
+    """Process a group of similar files."""
+    ui.display_group(group.id, group.files, group.similarity)
 
-        if action in ("q", "k"):
+    while True:
+        action = ui.prompt_for_action()
+
+        if action == "i":
+            ui.show_preview(group.files)
+        elif action == "m":
+            selected = ui.select_files(group.files, "Select files to move")
+            if selected:
+                moves = ui.create_moves(selected, group_id=group.id)
+                ui.pending_moves.extend(moves)
+                return "k"
+        elif action == "d":
+            ui.show_error("Delete operation not implemented yet")
+        elif action in ["k", "q"]:
             return action
 
-        if action == "p":
-            ui.show_preview(group.files)
-        elif action == "d":
-            ui.show_diff(group.files)
-        elif action == "m":
-            moves = ui.create_moves(group.files)
-            if moves:
-                ui.pending_moves.extend(moves)
-                graph.remove_files([m.source for m in moves])
-                return None
-        elif action == "s":
-            return None
+    return "k"
 
 
 def handle_interactive_mode(
@@ -455,48 +454,16 @@ def handle_non_interactive_mode(
 
 
 def handle_cleanup_phase(ui: InteractiveUI) -> int:
-    """Handle final cleanup of moved files."""
-    ui.console.print("\n[bold]Cleanup Phase[/bold]")
-
-    if not ui.pending_moves:
-        logger.info("No pending moves to clean up")
+    """Handle the cleanup phase after processing groups."""
+    if not ui.confirm("Execute pending moves?"):
         return 0
 
-    # Group moves by destination directory
-    by_dest: dict[Path, list[MoveOperation]] = defaultdict(list)
-    for move in ui.pending_moves:
-        by_dest[move.destination.parent].append(move)
-
-    logger.info(
-        f"Cleaning up {len(ui.pending_moves)} moves across {len(by_dest)} directories"
-    )
-
-    # Show summary
-    ui.console.print(
-        f"\nMoved {len(ui.pending_moves)} files to {len(by_dest)} directories:"
-    )
-    for dest, moves in by_dest.items():
-        ui.console.print(f"\n{dest}:")
-        for move in moves:
-            ui.console.print(f"  {move.source.name}")
-
-    if ui.move_config.dry_run:
-        logger.info("Dry run - no actual cleanup needed")
-        ui.console.print("\n[yellow]DRY RUN - No files were actually moved[/yellow]")
+    try:
+        execute_moves(ui.pending_moves)
+        ui.show_success(f"Successfully moved {len(ui.pending_moves)} files")
         return 0
-
-    # Offer to delete holding directory
-    if ui.confirm_action("delete", [ui.move_config.holding_dir]):
-        try:
-            logger.info(f"Deleting holding directory: {ui.move_config.holding_dir}")
-            shutil.rmtree(ui.move_config.holding_dir)
-            ui.show_success("Deleted holding directory")
-            logger.info("Successfully deleted holding directory")
-        except OSError as e:
-            logger.error(f"Failed to delete holding directory: {e}")
-            ui.show_error(f"Failed to delete holding directory: {e}")
-
-    return 0
+    except Exception as e:
+        return handle_error(ui.console, e)
 
 
 if __name__ == "__main__":
