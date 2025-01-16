@@ -1,6 +1,7 @@
 """Text file detection and scanning functionality."""
 
 import multiprocessing
+import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from multiprocessing import cpu_count
 from pathlib import Path
@@ -49,6 +50,8 @@ def scan_paths(
     max_workers: Optional[int] = None,
 ) -> List[TextFile]:
     """Scan paths for text files."""
+    logger = get_logger()
+
     config = FileAnalyzerConfig(
         min_printable_ratio=min_printable_ratio,
         num_perm=num_perm,
@@ -59,26 +62,105 @@ def scan_paths(
         max_workers=max_workers,
     )
 
+    logger.info_with_fields(
+        "Starting file scan",
+        operation="scan_start",
+        paths=paths,
+        config={
+            "min_printable_ratio": min_printable_ratio,
+            "num_perm": num_perm,
+            "shingle_size": shingle_size,
+            "follow_symlinks": follow_symlinks,
+            "skip_empty": skip_empty,
+            "max_workers": max_workers,
+        },
+    )
+
     # Collect all files
+    start_time = time.perf_counter()
     all_files = list(_collect_files(paths, follow_symlinks=follow_symlinks))
+    collection_time = time.perf_counter() - start_time
+
+    logger.info_with_fields(
+        "File collection completed",
+        operation="collect_files",
+        total_files=len(all_files),
+        collection_time=collection_time,
+    )
 
     # For small numbers of files, process sequentially to avoid overhead
     if len(all_files) < 10:
-        return [
+        logger.debug_with_fields(
+            "Using sequential processing for small file set",
+            operation="process_mode",
+            mode="sequential",
+            file_count=len(all_files),
+        )
+        results = [
             result
             for result in (_analyze_file((path, config)) for path in all_files)
             if result is not None
         ]
+        logger.info_with_fields(
+            "Sequential processing completed",
+            operation="scan_complete",
+            total_input_files=len(all_files),
+            valid_text_files=len(results),
+            processing_time=time.perf_counter() - start_time,
+        )
+        return results
 
     # Use parallel processing for larger sets of files
     workers = min(config.max_workers or cpu_count(), len(all_files))
+    logger.debug_with_fields(
+        "Using parallel processing",
+        operation="process_mode",
+        mode="parallel",
+        worker_count=workers,
+        file_count=len(all_files),
+    )
+
+    text_files: List[TextFile] = []
+    processed_count = 0
+    start_process_time = time.perf_counter()
+
     with ProcessPoolExecutor(max_workers=workers) as executor:
         futures = [executor.submit(_analyze_file, (path, config)) for path in all_files]
 
-        text_files = []
         for future in as_completed(futures):
-            result = future.result()
-            if result is not None:
-                text_files.append(result)
+            processed_count += 1
+            if processed_count % 100 == 0:  # Log progress every 100 files
+                logger.debug_with_fields(
+                    "Processing progress",
+                    operation="scan_progress",
+                    processed_files=processed_count,
+                    total_files=len(all_files),
+                    valid_files=len(text_files),
+                    elapsed_time=time.perf_counter() - start_process_time,
+                )
+
+            try:
+                result = future.result()
+                if result is not None:
+                    text_files.append(result)
+            except Exception as e:
+                logger.error_with_fields(
+                    "Error processing file",
+                    operation="file_error",
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                )
+
+    total_time = time.perf_counter() - start_time
+    logger.info_with_fields(
+        "File scan completed",
+        operation="scan_complete",
+        total_input_files=len(all_files),
+        valid_text_files=len(text_files),
+        total_time=total_time,
+        collection_time=collection_time,
+        processing_time=total_time - collection_time,
+        workers_used=workers,
+    )
 
     return text_files

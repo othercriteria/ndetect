@@ -101,8 +101,11 @@ def setup_logging(
         ):
             file_handler = logging.FileHandler(log_file)
             file_handler.setFormatter(JsonFormatter())
-            file_handler.setLevel(logging.DEBUG)
+            file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
             _logger_instance.addHandler(file_handler)
+            # Update existing logger level if verbose
+            if verbose:
+                _logger_instance.setLevel(logging.DEBUG)
         return _logger_instance
 
     # Create logger and explicitly cast to StructuredLogger
@@ -117,7 +120,7 @@ def setup_logging(
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(logging.INFO)
+    console_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
     logger.addHandler(console_handler)
 
     # File handler (if log_file is specified)
@@ -125,7 +128,7 @@ def setup_logging(
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_file)
         file_handler.setFormatter(json_formatter)
-        file_handler.setLevel(logging.DEBUG)
+        file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
         logger.addHandler(file_handler)
 
     _logger_instance = logger

@@ -390,8 +390,15 @@ def handle_non_interactive_mode(
     max_workers: Optional[int] = None,
 ) -> int:
     """Handle non-interactive mode operations."""
+    # Setup logging with verbose flag
+    setup_logging(log_file=log_file, verbose=verbose)
     logger = get_logger()
-    logger.info_with_fields("Starting non-interactive processing")
+
+    logger.info_with_fields(
+        "Starting non-interactive processing",
+        operation="start",
+        verbose=verbose,
+    )
 
     try:
         # Create analyzer config
