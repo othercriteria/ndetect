@@ -85,6 +85,13 @@ class PreviewConfig:
     max_lines: int = 3
     truncation_marker: str = "..."
 
+    def __post_init__(self) -> None:
+        """Validate numeric constraints."""
+        if self.max_chars <= 0:
+            raise ValueError("max_chars must be positive")
+        if self.max_lines <= 0:
+            raise ValueError("max_lines must be positive")
+
 
 @dataclass
 class RetentionConfig:
@@ -93,3 +100,11 @@ class RetentionConfig:
     strategy: str = "newest"  # newest, oldest, shortest_path, largest, smallest
     priority_paths: List[str] = field(default_factory=list)
     priority_first: bool = True  # If True, priority paths override other criteria
+
+    VALID_STRATEGIES = {"newest", "oldest", "shortest_path", "largest", "smallest"}
+
+    def __post_init__(self) -> None:
+        """Validate strategy value."""
+        if self.strategy not in self.VALID_STRATEGIES:
+            strategies = ", ".join(sorted(self.VALID_STRATEGIES))
+            raise ValueError(f"Invalid strategy. Must be one of: {strategies}")
