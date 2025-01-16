@@ -48,7 +48,7 @@ def compute_signature(
     file_path: Path, num_perm: int = 128, shingle_size: int = 5
 ) -> Optional[MinHash]:
     """
-    Compute MinHash signature for a file.
+    Compute MinHash signature for a file using streaming reads.
 
     Args:
         file_path: Path to the file
@@ -59,9 +59,33 @@ def compute_signature(
         MinHash object, or None if file cannot be read
     """
     try:
+        minhash = MinHash(num_perm=num_perm)
+        buffer = ""
+
         with open(file_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        return create_minhash(content, num_perm=num_perm, shingle_size=shingle_size)
+            while True:
+                chunk = f.read(8192)  # Read 8KB at a time
+                if not chunk:
+                    # Process remaining buffer
+                    if buffer:
+                        normalized = " ".join(buffer.lower().split())
+                        for i in range(len(normalized) - shingle_size + 1):
+                            shingle = normalized[i : i + shingle_size]
+                            minhash.update(shingle.encode("utf-8"))
+                    break
+
+                buffer += chunk
+                # Process complete shingles from buffer
+                while len(buffer) >= shingle_size * 2:
+                    # Normalize the processable portion
+                    normalized = " ".join(buffer[: shingle_size * 2].lower().split())
+                    for i in range(len(normalized) - shingle_size + 1):
+                        shingle = normalized[i : i + shingle_size]
+                        minhash.update(shingle.encode("utf-8"))
+                    # Keep the remainder that might contain incomplete shingles
+                    buffer = buffer[shingle_size:]
+
+        return minhash
     except (IOError, UnicodeDecodeError):
         return None
 
