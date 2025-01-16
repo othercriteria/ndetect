@@ -189,3 +189,118 @@ def test_file_analyzer_printable_ratio_bounds(tmp_path: Path, ratio: float) -> N
     file_path.write_text("Hello, World!")
     result = analyzer.analyze_file(file_path)
     assert (result is not None) == (ratio <= 1.0)
+
+
+def test_file_analyzer_with_symlink_loop(tmp_path: Path) -> None:
+    """Test analyzer with circular symbolic links."""
+    analyzer = FileAnalyzer(FileAnalyzerConfig())
+
+    # Create a directory for our loop
+    loop_dir = tmp_path / "loop"
+    loop_dir.mkdir()
+
+    # Create original file
+    original = loop_dir / "original.txt"
+    original.write_text("Hello, World!")
+
+    # Create a chain of symlinks that forms a loop
+    link1 = loop_dir / "link1.txt"
+    link2 = loop_dir / "link2.txt"
+    link3 = loop_dir / "link3.txt"
+
+    link1.symlink_to(original)
+    link2.symlink_to(link1)
+    link3.symlink_to(link2)
+    # Create the loop
+    original.unlink()
+    original.symlink_to(link3)
+
+    # Should handle the loop gracefully
+    result = analyzer.analyze_file(link1)
+    assert result is None  # Should fail safely when encountering a loop
+
+
+def test_file_analyzer_with_broken_symlink(tmp_path: Path) -> None:
+    """Test analyzer with broken symbolic links."""
+    analyzer = FileAnalyzer(FileAnalyzerConfig())
+
+    # Create a symlink to a non-existent file
+    link = tmp_path / "broken_link.txt"
+    nonexistent = tmp_path / "nonexistent.txt"
+    link.symlink_to(nonexistent)
+
+    result = analyzer.analyze_file(link)
+    assert result is None
+
+
+def test_file_analyzer_with_nested_symlinks(tmp_path: Path) -> None:
+    """Test analyzer with deeply nested symbolic links."""
+    analyzer = FileAnalyzer(FileAnalyzerConfig())
+
+    # Create original file
+    original = tmp_path / "original.txt"
+    original.write_text("Hello, World!")
+
+    # Create a chain of 10 nested symlinks
+    current = original
+    links = []
+    for i in range(10):
+        link = tmp_path / f"link_{i}.txt"
+        link.symlink_to(current)
+        links.append(link)
+        current = link
+
+    # Test the deepest link
+    result = analyzer.analyze_file(links[-1])
+    assert result is not None
+    assert result.path == links[-1]
+    assert result.size == len("Hello, World!")
+
+
+def test_file_analyzer_with_relative_symlinks(tmp_path: Path) -> None:
+    """Test analyzer with relative symbolic links."""
+    analyzer = FileAnalyzer(FileAnalyzerConfig())
+
+    # Create nested directory structure
+    dir1 = tmp_path / "dir1"
+    dir2 = tmp_path / "dir1" / "dir2"
+    dir2.mkdir(parents=True)
+
+    # Create original file
+    original = dir1 / "original.txt"
+    original.write_text("Hello, World!")
+
+    # Create relative symlink from dir2 to original
+    link = dir2 / "link.txt"
+    link.symlink_to("../original.txt")
+
+    result = analyzer.analyze_file(link)
+    assert result is not None
+    assert result.path == link
+    assert result.size == len("Hello, World!")
+
+
+def test_file_analyzer_with_symlink_to_directory(tmp_path: Path) -> None:
+    """Test analyzer with symlinks to directories containing target files."""
+    analyzer = FileAnalyzer(FileAnalyzerConfig())
+
+    # Create directory structure
+    source_dir = tmp_path / "source"
+    source_dir.mkdir()
+    target_dir = tmp_path / "target"
+    target_dir.mkdir()
+
+    # Create file in source directory
+    test_file = source_dir / "test.txt"
+    test_file.write_text("Hello, World!")
+
+    # Create symlink to directory
+    dir_link = target_dir / "source_link"
+    dir_link.symlink_to(source_dir)
+
+    # Try to analyze file through directory symlink
+    linked_file = dir_link / "test.txt"
+    result = analyzer.analyze_file(linked_file)
+    assert result is not None
+    assert result.path == linked_file
+    assert result.size == len("Hello, World!")
