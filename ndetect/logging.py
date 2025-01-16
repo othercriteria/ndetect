@@ -78,7 +78,7 @@ def setup_logging(
         verbose: If True, set log level to DEBUG.
 
     Returns:
-        StructuredLogger: Configured logger instance with structured logging capabilities.
+        StructuredLogger: Configured logger with structured logging capabilities.
     """
     # Create logger
     logger = logging.getLogger("ndetect")
