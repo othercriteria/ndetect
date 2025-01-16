@@ -82,7 +82,7 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--max-workers",
         type=int,
-        help="Maximum number of worker processes (default: number of CPU cores)",
+        help="Maximum number of worker processes for parallel scanning",
     )
     parser.add_argument(
         "--chunk-size",
@@ -134,6 +134,18 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         action="store_true",
         help="Apply priority paths before other retention criteria",
     )
+    parser.add_argument(
+        "--follow-symlinks",
+        action="store_true",
+        default=True,
+        help="Follow symbolic links when scanning (default: True)",
+    )
+    parser.add_argument(
+        "--no-follow-symlinks",
+        action="store_false",
+        dest="follow_symlinks",
+        help="Do not follow symbolic links when scanning",
+    )
 
     return parser.parse_args(argv)
 
@@ -178,6 +190,8 @@ def main(argv: Optional[List[str]] = None) -> int:
             min_printable_ratio=args.min_printable_ratio,
             num_perm=args.num_perm,
             shingle_size=args.shingle_size,
+            follow_symlinks=args.follow_symlinks,
+            max_workers=args.max_workers,
         )
         if not text_files:
             console.print("[red]No valid text files found.[/red]")

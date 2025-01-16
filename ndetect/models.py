@@ -3,7 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Set
 
 from datasketch import MinHash
 
@@ -108,3 +108,32 @@ class RetentionConfig:
         if self.strategy not in self.VALID_STRATEGIES:
             strategies = ", ".join(sorted(self.VALID_STRATEGIES))
             raise ValueError(f"Invalid strategy. Must be one of: {strategies}")
+
+
+@dataclass
+class FileAnalyzerConfig:
+    """Configuration for file analysis."""
+
+    min_printable_ratio: float = 0.8
+    num_perm: int = 128
+    shingle_size: int = 5
+    allowed_extensions: Optional[Set[str]] = None
+    follow_symlinks: bool = True
+    max_workers: Optional[int] = None
+
+    def __post_init__(self) -> None:
+        """Validate configuration and set defaults."""
+        if self.allowed_extensions is None:
+            self.allowed_extensions = {".txt", ".md", ".log", ".csv"}
+
+        if not 0 <= self.min_printable_ratio <= 1:
+            raise ValueError("min_printable_ratio must be between 0 and 1")
+
+        if self.num_perm <= 0:
+            raise ValueError("num_perm must be positive")
+
+        if self.shingle_size <= 0:
+            raise ValueError("shingle_size must be positive")
+
+        if self.max_workers is not None and self.max_workers <= 0:
+            raise ValueError("max_workers must be positive")

@@ -588,3 +588,72 @@ def test_process_group_similarities(tmp_path: Path) -> None:
 
     # Verify prompt was called twice
     assert mock_prompt.call_count == 2
+
+
+def test_non_interactive_mode_with_symlinks(tmp_path: Path) -> None:
+    """Test non-interactive mode handling of symlinks."""
+    # Create original files
+    original1 = tmp_path / "original1.txt"
+    original2 = tmp_path / "original2.txt"
+    original1.write_text("content1")
+    original2.write_text("content2")
+
+    # Create symlinks
+    link1 = tmp_path / "link1.txt"
+    link2 = tmp_path / "link2.txt"
+    link1.symlink_to(original1)
+    link2.symlink_to(original2)
+
+    text_files = scan_paths(
+        [str(tmp_path)],
+        min_printable_ratio=0.8,
+        follow_symlinks=True,  # New parameter
+    )
+
+    # Should find both originals and symlinks
+    assert len(text_files) == 4
+    paths = {f.path for f in text_files}
+    assert original1 in paths
+    assert original2 in paths
+    assert link1 in paths
+    assert link2 in paths
+
+
+def test_parse_args_symlink_options() -> None:
+    """Test parsing of symlink-related arguments."""
+    # Test default behavior
+    args = parse_args(["path/to/file"])
+    assert args.follow_symlinks is True
+
+    # Test explicit enable
+    args = parse_args(["--follow-symlinks", "path/to/file"])
+    assert args.follow_symlinks is True
+
+    # Test explicit disable
+    args = parse_args(["--no-follow-symlinks", "path/to/file"])
+    assert args.follow_symlinks is False
+
+
+def test_scan_paths_symlink_behavior(tmp_path: Path) -> None:
+    """Test symlink behavior in scan_paths."""
+    # Create original file
+    original = tmp_path / "original.txt"
+    original.write_text("Hello, World!")
+
+    # Create symlink
+    link = tmp_path / "link.txt"
+    link.symlink_to(original)
+
+    # Test with symlinks enabled (default)
+    files = scan_paths([str(tmp_path)], follow_symlinks=True)
+    paths = {f.path for f in files}
+    assert len(paths) == 2
+    assert original in paths
+    assert link in paths
+
+    # Test with symlinks disabled
+    files = scan_paths([str(tmp_path)], follow_symlinks=False)
+    paths = {f.path for f in files}
+    assert len(paths) == 1
+    assert original in paths
+    assert link not in paths

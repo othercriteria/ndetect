@@ -1,24 +1,9 @@
 """File analysis functionality for ndetect."""
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Set
+from typing import Optional
 
-from ndetect.models import TextFile
-
-
-@dataclass
-class FileAnalyzerConfig:
-    """Configuration for file analysis."""
-
-    min_printable_ratio: float = 0.8
-    num_perm: int = 128
-    shingle_size: int = 5
-    allowed_extensions: Optional[Set[str]] = None
-
-    def __post_init__(self) -> None:
-        if self.allowed_extensions is None:
-            self.allowed_extensions = {".txt", ".md", ".log", ".csv"}
+from ndetect.models import FileAnalyzerConfig, TextFile
 
 
 class FileAnalyzer:
@@ -50,6 +35,12 @@ class FileAnalyzer:
 
     def _is_valid_text_file(self, file_path: Path) -> bool:
         """Check if a file is a valid text file according to configuration."""
+        # Check for circular symlinks
+        try:
+            real_path = file_path.resolve(strict=True)
+        except (RuntimeError, OSError):
+            return False
+
         # Check if extension is allowed
         if (
             self.config.allowed_extensions is not None
@@ -57,8 +48,12 @@ class FileAnalyzer:
         ):
             return False
 
+        # If symlinks are disabled and this is a symlink, skip it
+        if not self.config.follow_symlinks and file_path.is_symlink():
+            return False
+
         try:
-            with file_path.open("rb") as f:
+            with real_path.open("rb") as f:
                 raw_bytes = f.read(8 * 1024)  # Read first 8KB
 
             try:

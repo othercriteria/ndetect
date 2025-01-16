@@ -222,6 +222,11 @@ ndetect --mode non-interactive \
 - `--num-perm [int]`: Number of MinHash permutations (default: 128)
 - `--shingle-size [int]`: Size of text shingles for comparison (default: 5)
 
+### File Selection Options
+
+- `--follow-symlinks`: Follow symbolic links when scanning (default)
+- `--no-follow-symlinks`: Do not follow symbolic links when scanning
+
 ## Future Considerations (Post-MVP)
 
 ### Error Handling & Operations
@@ -280,3 +285,8 @@ The project uses several code quality tools:
 
 All of these tools are automatically configured in the development environment when
 using `nix develop`.
+
+### Performance Options
+
+- `--max-workers [int]`: Maximum number of worker processes for parallel scanning
+  (default: CPU count)

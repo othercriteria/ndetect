@@ -2,7 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from ndetect.analysis import FileAnalyzer, FileAnalyzerConfig
+from ndetect.analysis import FileAnalyzer
+from ndetect.models import FileAnalyzerConfig
+from ndetect.text_detection import scan_paths
 
 
 def test_file_analyzer_with_invalid_extension(tmp_path: Path) -> None:
@@ -304,3 +306,24 @@ def test_file_analyzer_with_symlink_to_directory(tmp_path: Path) -> None:
     assert result is not None
     assert result.path == linked_file
     assert result.size == len("Hello, World!")
+
+
+def test_scan_paths_with_max_workers(tmp_path: Path) -> None:
+    """Test scanning with custom number of workers."""
+    # Create multiple test files
+    for i in range(5):
+        file = tmp_path / f"test{i}.txt"
+        file.write_text(f"Content {i}")
+
+    # Test with single worker
+    files1 = scan_paths([str(tmp_path)], max_workers=1)
+    assert len(files1) == 5
+
+    # Test with multiple workers
+    files2 = scan_paths([str(tmp_path)], max_workers=2)
+    assert len(files2) == 5
+
+    # Paths should be the same regardless of worker count
+    paths1 = {f.path for f in files1}
+    paths2 = {f.path for f in files2}
+    assert paths1 == paths2

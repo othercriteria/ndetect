@@ -2,7 +2,8 @@
 
 from pathlib import Path
 
-from ndetect.analysis import FileAnalyzer, FileAnalyzerConfig
+from ndetect.analysis import FileAnalyzer
+from ndetect.models import FileAnalyzerConfig
 
 
 def test_file_analyzer_with_text_file(tmp_path: Path) -> None:
