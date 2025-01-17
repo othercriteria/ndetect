@@ -3,8 +3,9 @@ from pathlib import Path
 
 import pytest
 
-from ndetect.analysis import FileAnalyzer, resolve_symlink
+from ndetect.analysis import FileAnalyzer
 from ndetect.models import FileAnalyzerConfig
+from ndetect.symlinks import resolve_symlink
 
 
 def test_symlink_to_text_file(tmp_path: Path) -> None:

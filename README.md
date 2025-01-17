@@ -248,42 +248,57 @@ ndetect --mode non-interactive \
 - `--follow-symlinks`: Follow symbolic links when scanning (default)
 - `--no-follow-symlinks`: Do not follow symbolic links when scanning
 - `--max-symlink-depth [int]`: Maximum depth when following symbolic links (default: 10)
+- `--base-dir [path]`: Restrict symlink resolution to specified directory
 
 ### Symlink Handling
 
-The tool provides secure and configurable symlink handling with the following features:
+The tool implements robust and secure symlink handling with the following features:
 
 1. **Base Directory Containment**:
-   - Optional base directory restriction
-   - Prevents symlinks from accessing files outside allowed paths
-   - Resolves both absolute and relative symlinks securely
+   - Optional base directory restriction via `--base-dir`
+   - Prevents symlinks from accessing files outside the allowed directory tree
+   - Handles both absolute and relative symlinks securely
+   - Validates paths using strict resolution checks
 
 1. **Cycle Detection**:
    - Prevents infinite loops from circular symlinks
-   - Detects both direct and indirect cycles
-   - Maintains a set of visited paths during traversal
+   - Tracks visited paths during resolution
+   - Handles both direct and indirect cycles gracefully
+   - Clears visited path cache between resolutions
 
 1. **Depth Control**:
    - Configurable maximum symlink depth (default: 10)
-   - Prevents excessive resource consumption
-   - Protects against deep symlink chains
-
-The `--max-symlink-depth` option allows you to adjust the depth limit based on your
-needs. Lower values provide additional security in untrusted environments, while
-higher values support legitimate deep symlink structures.
-
-The `--base-dir` option enables containment mode, ensuring symlinks cannot access
-files outside the specified directory tree. This is particularly useful when
-scanning untrusted content.
+   - Prevents resource exhaustion from deep symlink chains
+   - Customizable via `--max-symlink-depth` option
+   - Returns None for chains exceeding maximum depth
 
 ### Security Considerations
 
-- All symlinks are resolved atomically to prevent TOCTOU vulnerabilities
-- Relative symlinks are converted to absolute paths before validation
-- Failed symlink resolutions are handled gracefully
-- Base directory checks use Path.relative_to() for robust path validation
+- Atomic symlink resolution to prevent TOCTOU vulnerabilities
+- Strict path validation for base directory containment
+- Graceful handling of broken symlinks and permission errors
+- Comprehensive error reporting and logging
+- Zero-byte file detection and handling
+- Safe handling of relative path traversal attempts
 
-### Future Considerations (Post-MVP)
+### Implementation Details
+
+The symlink handler:
+
+- Validates existence before resolution
+- Converts relative symlinks to absolute paths
+- Performs base directory containment checks
+- Maintains state for cycle detection
+- Provides detailed error information
+- Supports both interactive and non-interactive modes
+
+For untrusted environments, it's recommended to:
+
+- Set a lower `--max-symlink-depth` value
+- Enable base directory containment with `--base-dir`
+- Use `--no-follow-symlinks` if symlink following is not required
+
+## Future Considerations (Post-MVP)
 
 ### Error Handling & Operations
 

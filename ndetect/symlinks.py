@@ -90,3 +90,9 @@ class SymlinkHandler:
             return str(abs_path).startswith(str(abs_base))
         except OSError:
             return False
+
+
+def resolve_symlink(path: Path, max_depth: int = 10) -> Optional[Path]:
+    """Helper function to resolve a symlink with basic settings."""
+    handler = SymlinkHandler(SymlinkConfig(max_depth=max_depth))
+    return handler.resolve(path)

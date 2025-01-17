@@ -6,44 +6,7 @@ from typing import Optional
 from .models import FileAnalyzerConfig, TextFile
 from .symlinks import SymlinkConfig, SymlinkHandler
 
-__all__ = ["FileAnalyzer", "resolve_symlink"]
-
-
-def resolve_symlink(path: Path, max_depth: int = 10) -> Optional[Path]:
-    """Resolve a symlink with maximum depth protection."""
-    try:
-        # For non-symlinks, just verify existence and return
-        if not path.is_symlink():
-            return path if path.exists() else None
-
-        # For symlinks, follow the chain
-        current = path
-        seen = set()
-        depth = 0
-
-        while depth < max_depth:
-            if current in seen:
-                return None  # Circular reference
-            seen.add(current)
-
-            if not current.exists():
-                return None
-
-            if not current.is_symlink():
-                return current
-
-            # Get the target and make it absolute if needed
-            target = current.readlink()
-            if not target.is_absolute():
-                target = (current.parent / target).resolve()
-
-            current = target
-            depth += 1
-
-        return None  # Max depth exceeded
-
-    except (OSError, RuntimeError):
-        return None
+__all__ = ["FileAnalyzer"]
 
 
 class FileAnalyzer:
