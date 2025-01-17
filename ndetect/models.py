@@ -122,6 +122,7 @@ class FileAnalyzerConfig:
     skip_empty: bool = True
     max_workers: Optional[int] = None
     max_symlink_depth: int = 10  # New field with default matching resolve_symlink
+    base_dir: Optional[Path] = None
 
     def __post_init__(self) -> None:
         """Validate configuration and set defaults."""

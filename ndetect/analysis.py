@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 
 from .models import FileAnalyzerConfig, TextFile
+from .symlinks import SymlinkConfig, SymlinkHandler
 
 __all__ = ["FileAnalyzer", "resolve_symlink"]
 
@@ -50,6 +51,13 @@ class FileAnalyzer:
 
     def __init__(self, config: FileAnalyzerConfig) -> None:
         self.config = config
+        self.symlink_handler = SymlinkHandler(
+            SymlinkConfig(
+                follow_symlinks=config.follow_symlinks,
+                max_depth=config.max_symlink_depth,
+                base_dir=config.base_dir,
+            )
+        )
 
     def analyze_file(self, file_path: Path) -> Optional[TextFile]:
         """Analyze a file and return TextFile if valid."""
@@ -66,12 +74,7 @@ class FileAnalyzer:
         try:
             # Handle symlinks
             if file_path.is_symlink():
-                if not self.config.follow_symlinks:
-                    return False
-
-                resolved = resolve_symlink(
-                    file_path, max_depth=self.config.max_symlink_depth
-                )
+                resolved = self.symlink_handler.resolve(file_path)
                 if resolved is None:
                     return False
                 real_path = resolved
@@ -91,7 +94,16 @@ class FileAnalyzer:
             if self.config.skip_empty and real_path.stat().st_size == 0:
                 return False
 
-            with real_path.open("rb") as f:
+            # Check text content
+            return self._is_valid_text_content(real_path)
+
+        except OSError:
+            return False
+
+    def _is_valid_text_content(self, file_path: Path) -> bool:
+        """Check if file content is valid text."""
+        try:
+            with file_path.open("rb") as f:
                 raw_bytes = f.read(8 * 1024)  # Read first 8KB
 
             try:
