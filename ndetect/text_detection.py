@@ -48,6 +48,7 @@ def scan_paths(
     follow_symlinks: bool = True,
     skip_empty: bool = True,
     max_workers: Optional[int] = None,
+    cleanup_timeout: float = 30.0,
 ) -> List[TextFile]:
     """Scan paths for text files."""
     logger = get_logger()
@@ -152,7 +153,7 @@ def scan_paths(
                     error_message=str(e),
                 )
     finally:
-        cleanup_resources(executor)
+        cleanup_resources(executor, timeout=cleanup_timeout)
 
     total_time = time.perf_counter() - start_time
     logger.info_with_fields(
@@ -169,10 +170,42 @@ def scan_paths(
     return text_files
 
 
-def cleanup_resources(executor: ProcessPoolExecutor) -> None:
-    """Ensure proper cleanup of process pool resources."""
+def cleanup_resources(executor: ProcessPoolExecutor, timeout: float = 30.0) -> None:
+    """Ensure proper cleanup of process pool resources.
+
+    Args:
+        executor: The ProcessPoolExecutor to clean up
+        timeout: Maximum time in seconds to wait for shutdown (default: 30.0)
+    """
     try:
+        # First attempt graceful shutdown without timeout parameter
         executor.shutdown(wait=True, cancel_futures=True)
+
+        # Additional timeout-based wait for remaining processes
+        start_time = time.monotonic()
+        while time.monotonic() - start_time < timeout:
+            remaining = multiprocessing.active_children()
+            if not remaining:
+                break
+            time.sleep(0.1)
+        else:
+            logger.warning_with_fields(
+                "Timeout during executor shutdown, forcing termination",
+                operation="cleanup",
+                timeout=timeout,
+            )
+            # Force terminate remaining processes
+            for process in multiprocessing.active_children():
+                process.terminate()
+                process.join(timeout=1.0)
+
+    except KeyboardInterrupt:
+        logger.warning_with_fields(
+            "Cleanup interrupted, ensuring process termination", operation="cleanup"
+        )
+        # Handle keyboard interrupt during cleanup
+        for process in multiprocessing.active_children():
+            process.terminate()
     except Exception as e:
         logger.error_with_fields(
             "Error during resource cleanup",
@@ -180,3 +213,9 @@ def cleanup_resources(executor: ProcessPoolExecutor) -> None:
             error_type=type(e).__name__,
             error_message=str(e),
         )
+        # Still try to terminate processes
+        for process in multiprocessing.active_children():
+            try:
+                process.terminate()
+            except Exception:
+                pass

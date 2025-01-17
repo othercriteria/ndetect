@@ -3,7 +3,7 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any
+from typing import Any, List
 from unittest.mock import Mock, create_autospec, patch
 
 import pytest
@@ -398,27 +398,28 @@ def failing_analyze_for_test(*args: Any) -> None:
 
 
 def test_scan_paths_cleanup_after_exception(tmp_path: Path) -> None:
-    """Test that cleanup occurs even when processing raises an exception."""
-    # Create test files to trigger parallel processing
-    for i in range(20):
+    """Test that cleanup is called even when scanning fails."""
+    # Create enough files to trigger parallel processing
+    for i in range(10):
         test_file = tmp_path / f"test{i}.txt"
-        test_file.write_text("test content")
+        test_file.write_text(f"test content {i}")
 
+    mock_cleanup = Mock()
     mock_logger = create_autospec(StructuredLogger)
-    cleanup_called = False
 
-    def mock_cleanup(*args: Any) -> None:
-        nonlocal cleanup_called
-        cleanup_called = True
+    with (
+        patch("ndetect.text_detection.cleanup_resources", mock_cleanup),
+        patch(
+            "ndetect.text_detection._analyze_file", side_effect=ValueError("Test error")
+        ),
+        patch("ndetect.text_detection.get_logger", return_value=mock_logger),
+    ):
+        result = scan_paths([str(tmp_path)])
 
-    with patch("ndetect.text_detection.get_logger", return_value=mock_logger):
-        with patch("ndetect.text_detection._analyze_file", failing_analyze_for_test):
-            with patch("ndetect.text_detection.cleanup_resources", mock_cleanup):
-                result = scan_paths([str(tmp_path)])
-
-                assert cleanup_called
-                assert mock_logger.error_with_fields.called
-                assert len(result) == 0
+    # Verify cleanup was called and no files were processed
+    assert mock_cleanup.call_count == 1, "Cleanup should be called exactly once"
+    assert len(result) == 0, "Expected no successfully processed files"
+    assert mock_logger.error_with_fields.call_count > 0, "Expected error logs"
 
 
 def test_scan_paths_sequential_processing(tmp_path: Path) -> None:
@@ -451,11 +452,10 @@ def test_scan_paths_with_worker_limit(tmp_path: Path) -> None:
 
     with ProcessPoolExecutor(max_workers=2) as executor:
         original_process_count = len(multiprocessing.active_children())
-        result = scan_paths([str(tmp_path)], max_workers=2)
+        result = scan_paths([str(tmp_path)], max_workers=2, cleanup_timeout=2.0)
 
         assert len(result) == 20
-        executor.shutdown(wait=True)
-        time.sleep(0.5)
+        cleanup_resources(executor, timeout=2.0)
 
         final_process_count = len(multiprocessing.active_children())
         assert final_process_count <= original_process_count
@@ -475,3 +475,70 @@ def test_process_cleanup_on_error(tmp_path: Path) -> None:
 
         final_process_count = len(multiprocessing.active_children())
         assert final_process_count <= original_process_count
+
+
+def test_cleanup_resources_timeout() -> None:
+    """Test cleanup with timeout."""
+    executor = ProcessPoolExecutor(max_workers=1)
+    mock_logger = Mock()
+
+    # Create a mock process that appears to be running
+    mock_process = Mock()
+    mock_process.terminate = Mock()
+    mock_process.join = Mock()
+
+    def mock_active_children() -> List[Any]:
+        return [mock_process]  # Simulate a process that hasn't terminated
+
+    def slow_shutdown(*args: Any, **kwargs: Any) -> None:
+        # Simulate completed shutdown but leave process running
+        pass
+
+    with patch("multiprocessing.active_children", mock_active_children):
+        with patch.object(executor, "shutdown", side_effect=slow_shutdown):
+            with patch("ndetect.text_detection.logger", mock_logger):
+                # Use very short timeout to trigger condition quickly
+                cleanup_resources(executor, timeout=0.1)
+
+    # Verify timeout warning was logged
+    mock_logger.warning_with_fields.assert_called_with(
+        "Timeout during executor shutdown, forcing termination",
+        operation="cleanup",
+        timeout=0.1,
+    )
+    # Verify process termination was attempted
+    mock_process.terminate.assert_called_once()
+    mock_process.join.assert_called_once()
+
+
+def test_cleanup_resources_keyboard_interrupt() -> None:
+    """Test cleanup when interrupted."""
+    executor = ProcessPoolExecutor(max_workers=1)
+    mock_logger = Mock()
+
+    def interrupt_shutdown(*args: Any, **kwargs: Any) -> None:
+        raise KeyboardInterrupt()
+
+    with patch.object(executor, "shutdown", side_effect=interrupt_shutdown):
+        with patch("ndetect.text_detection.logger", mock_logger):
+            cleanup_resources(executor)
+
+    # Verify interrupt warning was logged
+    mock_logger.warning_with_fields.assert_called_with(
+        "Cleanup interrupted, ensuring process termination", operation="cleanup"
+    )
+
+
+def test_cleanup_resources_with_context() -> None:
+    """Test cleanup using context manager."""
+    with ProcessPoolExecutor(max_workers=2) as executor:
+        original_count = len(multiprocessing.active_children())
+
+        # Simulate some work
+        executor.submit(time.sleep, 0.1)
+
+        cleanup_resources(executor)
+        time.sleep(0.5)  # Allow time for cleanup
+
+        final_count = len(multiprocessing.active_children())
+        assert final_count <= original_count
