@@ -327,6 +327,10 @@ The following parameters can be customized:
 - `--threshold`: Minimum similarity threshold (default: 0.8)
 - `--min-printable`: Minimum ratio of printable characters (default: 0.8)
 
+## Requirements
+
+- Python 3.10 or higher
+
 ## Development
 
 For information about setting up a development environment and contributing to ndetect,

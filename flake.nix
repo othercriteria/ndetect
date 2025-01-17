@@ -63,7 +63,7 @@
             # Start mypy daemon if not already running
             if ! dmypy status >/dev/null 2>&1; then
               dmypy start -- --strict --ignore-missing-imports \
-                --python-version=3.12 \
+                --python-version=3.10 \
                 --cache-dir=.mypy_cache \
                 --no-namespace-packages \
                 --exclude='^(build|dist|\.git|\.mypy_cache|\.pytest_cache|\.venv)/'
