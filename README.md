@@ -251,31 +251,37 @@ ndetect --mode non-interactive \
 
 ### Symlink Handling
 
-ndetect implements secure and robust symlink handling with several safety mechanisms:
+The tool provides secure and configurable symlink handling with the following features:
 
-1. **Depth Protection**: Limits the maximum depth of symlink chains to prevent:
-   - Stack overflow from excessive recursion
-   - Resource exhaustion from deeply nested links
-   - Potential denial of service attacks
+1. **Base Directory Containment**:
+   - Optional base directory restriction
+   - Prevents symlinks from accessing files outside allowed paths
+   - Resolves both absolute and relative symlinks securely
 
-1. **Cycle Detection**: Maintains a set of visited paths to detect and safely handle:
-   - Circular references
-   - Self-referential symlinks
-   - Complex cyclic structures
+1. **Cycle Detection**:
+   - Prevents infinite loops from circular symlinks
+   - Detects both direct and indirect cycles
+   - Maintains a set of visited paths during traversal
 
-1. **Path Resolution**:
-   - Converts relative symlinks to absolute paths
-   - Validates each link in the chain
-   - Ensures target files actually exist
-
-1. **Permission Handling**:
-   - Respects file system permissions
-   - Fails gracefully on inaccessible targets
-   - Maintains security context during traversal
+1. **Depth Control**:
+   - Configurable maximum symlink depth (default: 10)
+   - Prevents excessive resource consumption
+   - Protects against deep symlink chains
 
 The `--max-symlink-depth` option allows you to adjust the depth limit based on your
-needs, with a default of 10 levels for safety. Increase this value when working with
-deeply nested symlink structures, or decrease it in security-sensitive environments.
+needs. Lower values provide additional security in untrusted environments, while
+higher values support legitimate deep symlink structures.
+
+The `--base-dir` option enables containment mode, ensuring symlinks cannot access
+files outside the specified directory tree. This is particularly useful when
+scanning untrusted content.
+
+### Security Considerations
+
+- All symlinks are resolved atomically to prevent TOCTOU vulnerabilities
+- Relative symlinks are converted to absolute paths before validation
+- Failed symlink resolutions are handled gracefully
+- Base directory checks use Path.relative_to() for robust path validation
 
 ### Future Considerations (Post-MVP)
 

@@ -27,15 +27,15 @@ class SymlinkHandler:
             return None
 
         try:
+            self._seen_paths.clear()
+
             # For non-symlinks, just verify existence
             if not path.is_symlink():
                 return path if path.exists() else None
 
-            # Reset seen paths for new resolution
-            self._seen_paths.clear()
             return self._resolve_chain(path, depth=0)
 
-        except (OSError, RuntimeError):
+        except OSError:
             return None
 
     def _resolve_chain(self, current: Path, depth: int) -> Optional[Path]:
@@ -43,33 +43,33 @@ class SymlinkHandler:
         if depth >= self.config.max_depth:
             return None
 
-        if current in self._seen_paths:
-            return None  # Circular reference
-        self._seen_paths.add(current)
-
-        if not current.exists():
-            return None
-
-        if not current.is_symlink():
-            return current
-
-        # Get the target and make it absolute if needed
-        target = current.readlink()
-        if not target.is_absolute():
-            target = (current.parent / target).resolve()
-
-        # Check if target is within base directory if specified
-        if self.config.base_dir and not self._is_within_base_dir(target):
-            return None
-
-        return self._resolve_chain(target, depth + 1)
-
-    def _is_within_base_dir(self, path: Path) -> bool:
-        """Check if path is within base directory."""
-        if not self.config.base_dir:
-            return True
         try:
-            path.relative_to(self.config.base_dir)
-            return True
-        except ValueError:
-            return False
+            # Check for cycles
+            if current in self._seen_paths:
+                return None
+            self._seen_paths.add(current)
+
+            # Verify existence
+            if not current.exists():
+                return None
+
+            # If not a symlink, we've reached the end
+            if not current.is_symlink():
+                return current
+
+            # Get the target
+            target = current.readlink()
+            if not target.is_absolute():
+                target = (current.parent / target).resolve()
+
+            # Check base directory constraint
+            if self.config.base_dir:
+                try:
+                    target.relative_to(self.config.base_dir)
+                except ValueError:
+                    return None
+
+            return self._resolve_chain(target, depth + 1)
+
+        except OSError:
+            return None
