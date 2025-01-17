@@ -31,8 +31,13 @@ class SymlinkHandler:
 
             # For non-symlinks, just verify existence
             if not path.is_symlink():
-                return path if path.exists() else None
+                if not path.exists():
+                    return None
+                if self.config.base_dir and not self._is_within_base_dir(path):
+                    return None
+                return path
 
+            # Start resolution chain
             return self._resolve_chain(path, depth=0)
 
         except OSError:
@@ -55,21 +60,33 @@ class SymlinkHandler:
 
             # If not a symlink, we've reached the end
             if not current.is_symlink():
+                if self.config.base_dir and not self._is_within_base_dir(current):
+                    return None
                 return current
 
-            # Get the target
+            # Get the target and resolve it
             target = current.readlink()
             if not target.is_absolute():
-                target = (current.parent / target).resolve()
+                target = (current.parent / target).resolve(strict=False)
 
-            # Check base directory constraint
-            if self.config.base_dir:
-                try:
-                    target.relative_to(self.config.base_dir)
-                except ValueError:
-                    return None
+            # Check base directory containment
+            if self.config.base_dir and not self._is_within_base_dir(target):
+                return None
 
             return self._resolve_chain(target, depth + 1)
 
         except OSError:
             return None
+
+    def _is_within_base_dir(self, path: Path) -> bool:
+        """Check if path is within allowed base directory."""
+        if not self.config.base_dir:
+            return True
+
+        try:
+            abs_path = path.resolve(strict=False)
+            abs_base = self.config.base_dir.resolve(strict=False)
+
+            return str(abs_path).startswith(str(abs_base))
+        except OSError:
+            return False
