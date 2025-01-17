@@ -9,6 +9,7 @@ from typing import List, Optional
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 
+from ndetect import __version__
 from ndetect.exceptions import (
     handle_error,
 )
@@ -34,6 +35,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
         description="Detect and manage similar text files."
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"ndetect {__version__}",
     )
     parser.add_argument(
         "paths",
