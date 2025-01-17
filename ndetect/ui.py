@@ -3,7 +3,7 @@
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.panel import Panel
@@ -38,12 +38,16 @@ class InteractiveUI:
         preview_config: Optional[PreviewConfig] = None,
         retention_config: Optional[RetentionConfig] = None,
         logger: Optional[StructuredLogger] = None,
+        base_dir: Optional[Path] = None,
     ) -> None:
         """Initialize the UI."""
         self.console = console
         self.move_config = move_config
+        self.base_dir = base_dir
         self.preview_config = preview_config or PreviewConfig()
-        self.retention_config = retention_config
+        self.retention_config: RetentionConfig = retention_config or RetentionConfig(
+            strategy="newest"
+        )
         self.pending_moves: List[MoveOperation] = []
         self.logger = logger or get_logger()  # Use passed logger or get global instance
 
@@ -110,17 +114,20 @@ class InteractiveUI:
 
     def prompt_for_action(self) -> Action:
         """Prompt for user action."""
-        choice = Prompt.ask(
-            "\nChoose action", choices=["k", "d", "m", "p", "s", "q"], default="k"
-        )
-        return {
+        action_map: Dict[str, Action] = {
             "k": Action.KEEP,
             "d": Action.DELETE,
             "m": Action.MOVE,
             "p": Action.PREVIEW,
             "s": Action.SIMILARITIES,
+            "h": Action.HELP,
             "q": Action.QUIT,
-        }[choice]
+        }
+
+        choice = Prompt.ask(
+            "\nChoose action", choices=list(action_map.keys()), default="k"
+        )
+        return action_map[choice]
 
     def select_files(
         self, files: List[Path], prompt: str = "Select files"
@@ -228,7 +235,10 @@ class InteractiveUI:
             Panel(
                 "[cyan]k[/cyan]: Keep all files in this group\n"
                 "[cyan]d[/cyan]: Delete selected files\n"
-                "[cyan]m[/cyan]: Move selected files to holding directory",
+                "[cyan]m[/cyan]: Move selected files to holding directory\n"
+                "[cyan]p[/cyan]: Preview file contents\n"
+                "[cyan]s[/cyan]: Show similarities between files\n"
+                "[cyan]q[/cyan]: Quit program",
                 title="Available Actions",
                 border_style="blue",
             )
@@ -349,80 +359,69 @@ class InteractiveUI:
         )
         self.console.print(panel)
 
-    def handle_delete(self, files: List[Path]) -> None:
-        """Handle deletion of files."""
-        logger.info_with_fields("Preparing delete operation", operation="delete")
+    def _handle_file_operation(
+        self,
+        files: List[Path],
+        operation_name: str,
+        execute_operation: Callable[[List[Path]], None],
+        get_confirmation_message: Callable[[List[Path]], str],
+    ) -> bool:
+        """Handle common file operation logic (delete/move).
 
-        # First use select_keeper to determine which files to delete
-        files_to_delete = files
-        if self.retention_config:
-            keeper = select_keeper(files, self.retention_config)
-            files_to_delete = [f for f in files if f != keeper]
-            self.console.print(f"\n[green]Keeping: {keeper}[/green]")
+        Args:
+            files: List of files to operate on
+            operation_name: Name of operation for display ("delete" or "move")
+            execute_operation: Function to execute the operation
+            get_confirmation_message: Function to get confirmation message
 
-        if not files_to_delete:
-            self.console.print("[yellow]No files selected for deletion[/yellow]")
-            return
+        Returns:
+            bool: True if operation was successful, False otherwise
+        """
+        if not files:
+            self.console.print(
+                f"[yellow]No files selected for {operation_name}[/yellow]"
+            )
+            return False
 
-        # Show preview of files to be deleted
-        self.show_delete_preview(files_to_delete)
+        # Select files to operate on based on retention config
+        keeper = select_keeper(files, self.retention_config)
+        files_to_process = [f for f in files if f != keeper]
 
-        logger.info_with_fields("User confirmation requested", operation="delete")
-        if not self.confirm("Are you sure you want to delete these files?"):
-            return
+        if not files_to_process:
+            self.console.print(
+                f"[yellow]No files selected for {operation_name}[/yellow]"
+            )
+            return False
 
-        logger.info_with_fields("Starting delete operations", operation="delete")
+        # Show confirmation
+        msg = get_confirmation_message(files_to_process)
+        if not self.confirm(msg):
+            return False
+
         try:
-            delete_files(files_to_delete)
-            self.console.print(f"Successfully deleted {len(files_to_delete)} files")
-            logger.info_with_fields(
-                "Successfully deleted files",
-                operation="delete",
-                count=len(files_to_delete),
+            execute_operation(files_to_process)
+            self.console.print(
+                f"[green]Successfully {operation_name}d {len(files_to_process)}"
+                "files[/green]"
             )
-        except FileOperationError as e:
-            self.show_error(f"Failed to delete files: {e}")
-            logger.error_with_fields(
-                "Failed to delete files", operation="delete", error=str(e)
-            )
+            return True
+        except (FileOperationError, PermissionError, DiskSpaceError) as e:
+            self.console.print(f"[red]Error during {operation_name}: {e}[/red]")
+            return False
 
-    def show_move_preview(self, files: List[Path]) -> None:
-        """Show preview of files to be moved."""
-        panel = Panel(
-            "\n".join(str(f) for f in files),
-            title="Files to Move",
-            subtitle="Move Preview",
+    def handle_delete(self, files: List[Path]) -> bool:
+        """Handle deletion of selected files."""
+        return self._handle_file_operation(
+            files,
+            "delete",
+            delete_files,
+            lambda files: f"Delete {len(files)} files? This cannot be undone!",
         )
-        self.console.print(panel)
 
-    def handle_move(self, files: List[Path]) -> None:
-        """Handle moving files to holding directory."""
-        if not self.move_config:
-            self.show_error("Move operation not configured")
-            return
+    def handle_move(self, files: List[Path], group_id: Optional[int] = None) -> bool:
+        """Handle moving selected files to holding directory."""
 
-        logger.info_with_fields("Preparing move operation", operation="move")
-
-        # First use select_keeper to determine which files to move
-        files_to_move = files
-        if self.retention_config:
-            keeper = select_keeper(files, self.retention_config)
-            files_to_move = [f for f in files if f != keeper]
-            self.console.print(f"\n[green]Keeping: {keeper}[/green]")
-
-        if not files_to_move:
-            self.console.print("[yellow]No files selected for moving[/yellow]")
-            return
-
-        # Show preview of files to be moved
-        self.show_move_preview(files_to_move)
-
-        logger.info_with_fields("User confirmation requested", operation="move")
-        if not self.confirm("Are you sure you want to move these files?"):
-            return
-
-        logger.info_with_fields("Starting move operations", operation="move")
-        try:
+        def perform_moves(files_to_move: List[Path]) -> None:
             moves = prepare_moves(
                 files=files_to_move,
                 holding_dir=self.move_config.holding_dir,
@@ -430,12 +429,13 @@ class InteractiveUI:
             )
             if not self.move_config.dry_run:
                 execute_moves(moves)
-            self.console.print(f"Successfully moved {len(files_to_move)} files")
-            logger.info_with_fields(
-                "Successfully moved files", operation="move", count=len(files_to_move)
-            )
-        except FileOperationError as e:
-            self.show_error(f"Failed to move files: {e}")
-            logger.error_with_fields(
-                "Failed to move files", operation="move", error=str(e)
-            )
+            else:
+                self.display_move_preview(moves)
+
+        def get_move_confirmation(files_to_move: List[Path]) -> str:
+            target = self.move_config.holding_dir
+            return f"Move {len(files_to_move)} files to {target}?"
+
+        return self._handle_file_operation(
+            files, "move", perform_moves, get_move_confirmation
+        )

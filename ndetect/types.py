@@ -37,4 +37,5 @@ class Action(Enum):
     MOVE = auto()  # Move selected files (m)
     PREVIEW = auto()  # Preview file contents (p)
     SIMILARITIES = auto()  # Show similarities (s)
+    HELP = auto()  # Show help (h)
     QUIT = auto()  # Quit program (q)

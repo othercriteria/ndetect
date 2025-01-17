@@ -3,12 +3,14 @@ import time
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
 from ndetect.operations import MoveOperation
+from ndetect.types import Action
 from ndetect.ui import InteractiveUI
 
 
@@ -193,3 +195,48 @@ def test_handle_move_with_select_keeper(tmp_path: Path) -> None:
 
         # Verify execute_moves was called with the mock moves
         mock_execute.assert_called_once_with(mock_moves)
+
+
+def test_show_help(capsys: pytest.CaptureFixture[str]) -> None:
+    """Test that help information is displayed correctly."""
+    # Setup UI
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=Path("holding"))
+    ui = InteractiveUI(console=console, move_config=move_config)
+
+    # Mock logger to avoid actual logging
+    with patch.object(ui, "logger") as mock_logger:
+        ui.show_help()
+
+        # Verify logger was called
+        mock_logger.info_with_fields.assert_called_once_with(
+            "Displaying help", operation="ui", type="help"
+        )
+
+        # Get output and convert to plain text
+        output = capsys.readouterr().out
+        plain_text = Text.from_ansi(output).plain
+
+        # Verify all actions are shown in help text
+        assert "k: Keep all files in this group" in plain_text
+        assert "d: Delete selected files" in plain_text
+        assert "m: Move selected files to holding directory" in plain_text
+        assert "p: Preview file contents" in plain_text
+        assert "s: Show similarities between files" in plain_text
+        assert "q: Quit program" in plain_text
+        assert "Available Actions" in plain_text
+
+
+def test_prompt_for_action_help(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Test that help action is properly handled in prompt."""
+    # Setup UI
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=Path("holding"))
+    ui = InteractiveUI(console=console, move_config=move_config)
+
+    # Mock Prompt.ask to return 'h'
+    monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "h")
+
+    # Verify help action is returned
+    action = ui.prompt_for_action()
+    assert action == Action.HELP
