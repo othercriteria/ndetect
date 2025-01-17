@@ -1,10 +1,14 @@
+import os
+import time
 from pathlib import Path
+from unittest.mock import patch
 
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from ndetect.models import MoveConfig, PreviewConfig
+from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
+from ndetect.operations import MoveOperation
 from ndetect.ui import InteractiveUI
 
 
@@ -100,3 +104,92 @@ def test_show_similarities(tmp_path: Path) -> None:
             if percentage in row:
                 found_percentages.add(percentage)
     assert found_percentages == percentages
+
+
+def test_handle_delete_with_select_keeper(tmp_path: Path) -> None:
+    """Test handle_delete using select_keeper to retain one file and delete others."""
+    # Create test files
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file3 = tmp_path / "file3.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+    file3.write_text("content3")
+
+    # Configure retention strategy
+    retention_config = RetentionConfig(strategy="newest")
+
+    # Modify file timestamps to make file3 the newest
+    current_time = time.time()
+    os.utime(file1, (current_time - 300, current_time - 300))  # 5 minutes ago
+    os.utime(file2, (current_time - 200, current_time - 200))  # ~3 minutes ago
+    os.utime(file3, (current_time - 100, current_time - 100))  # ~1.5 minutes ago
+
+    # Setup UI with retention_config
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    ui = InteractiveUI(
+        console=console, move_config=move_config, retention_config=retention_config
+    )
+
+    # Mock both confirm and delete_files
+    with (
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files") as mock_delete,
+    ):
+        ui.handle_delete([file1, file2, file3])
+        # file3 should be kept as it's the newest
+        mock_delete.assert_called_once_with([file1, file2])
+
+
+def test_handle_move_with_select_keeper(tmp_path: Path) -> None:
+    """Test handle_move using select_keeper to retain one file and move others."""
+    # Create test files
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file3 = tmp_path / "file3.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+    file3.write_text("content3")
+
+    # Configure retention strategy
+    retention_config = RetentionConfig(strategy="newest")
+
+    # Modify file timestamps to make file3 the newest
+    current_time = time.time()
+    os.utime(file1, (current_time - 300, current_time - 300))  # 5 minutes ago
+    os.utime(file2, (current_time - 200, current_time - 200))  # ~3 minutes ago
+    os.utime(file3, (current_time - 100, current_time - 100))  # ~1.5 minutes ago
+
+    # Setup UI with retention_config and move_config
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    ui = InteractiveUI(
+        console=console, move_config=move_config, retention_config=retention_config
+    )
+
+    # Mock confirm, prepare_moves, and execute_moves
+    with (
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.prepare_moves") as mock_prepare,
+        patch("ndetect.ui.execute_moves") as mock_execute,
+    ):
+        # Setup mock prepare_moves to return a list of mock moves
+        mock_moves = [
+            MoveOperation(file1, move_config.holding_dir / "file1.txt", 1),
+            MoveOperation(file2, move_config.holding_dir / "file2.txt", 1),
+        ]
+        mock_prepare.return_value = mock_moves
+
+        # Execute the move operation
+        ui.handle_move([file1, file2, file3])
+
+        # Verify prepare_moves was called with correct parameters
+        mock_prepare.assert_called_once_with(
+            files=[file1, file2],  # file3 should be kept
+            holding_dir=move_config.holding_dir,
+            preserve_structure=move_config.preserve_structure,
+        )
+
+        # Verify execute_moves was called with the mock moves
+        mock_execute.assert_called_once_with(mock_moves)

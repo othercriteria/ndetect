@@ -3,14 +3,17 @@ import os
 import shutil
 from pathlib import Path
 from typing import Any, List
+from unittest.mock import patch
 
 import pytest
 from rich.console import Console
 
 from ndetect.cli import handle_non_interactive_mode
 from ndetect.exceptions import FileOperationError, PermissionError
-from ndetect.models import RetentionConfig
+from ndetect.logging import get_logger
+from ndetect.models import CLIConfig, RetentionConfig
 from ndetect.operations import MoveOperation, delete_files, select_keeper
+from ndetect.text_detection import scan_paths
 
 
 def test_select_keeper_newest(tmp_path: Path) -> None:
@@ -66,8 +69,13 @@ def test_non_interactive_mode_with_retention(
     file1.write_text("test content")
     file2.write_text("test content")
 
-    retention_config = RetentionConfig(
-        strategy="newest",
+    config = CLIConfig(
+        paths=[str(tmp_path)],
+        mode="non-interactive",
+        threshold=0.5,
+        base_dir=tmp_path,
+        holding_dir=duplicates_dir,
+        retention_strategy="newest",
         priority_paths=["important/*"],
         priority_first=True,
     )
@@ -82,13 +90,20 @@ def test_non_interactive_mode_with_retention(
     monkeypatch.setattr("ndetect.cli.execute_moves", mock_execute_moves)
 
     console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
     result = handle_non_interactive_mode(
+        config=config,
         console=console,
-        paths=[str(tmp_path)],  # Pass paths instead of text_files
-        threshold=0.5,
-        base_dir=tmp_path,
-        holding_dir=duplicates_dir,
-        retention_config=retention_config,
+        text_files=text_files,
+        logger=get_logger(),
     )
     assert result == 0
 
@@ -109,25 +124,24 @@ def test_delete_files(tmp_path: Path) -> None:
     assert not file2.exists()
 
 
-def test_delete_files_permission_error(tmp_path: Path, monkeypatch: Any) -> None:
-    """Test handling of permission errors during delete."""
+def test_delete_files_permission_error(tmp_path: Path) -> None:
+    """Test handling of permission errors during file deletion."""
     file = tmp_path / "test.txt"
-    file.write_text("content")
+    file.write_text("test content")
 
     def mock_unlink(*args: Any) -> None:
         raise builtins.PermissionError("Permission denied")
 
-    monkeypatch.setattr(Path, "unlink", mock_unlink)
-
-    with pytest.raises(PermissionError) as exc_info:
+    with (
+        patch.object(Path, "unlink", mock_unlink),
+        pytest.raises(
+            PermissionError, match=f"delete failed for {file}.*Permission denied"
+        ),
+    ):
         delete_files([file])
 
-    error_msg = str(exc_info.value)
-    # Check that the error contains the expected components
-    assert "delete failed" in error_msg
-    assert str(file) in error_msg
-    # The original error message is included
-    assert "Permission denied" in error_msg
+    # Verify file still exists after failed deletion
+    assert file.exists()
 
 
 def test_delete_files_empty_list() -> None:

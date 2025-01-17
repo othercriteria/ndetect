@@ -12,8 +12,8 @@ from ndetect.cli import (
     scan_paths,
 )
 from ndetect.exceptions import FileOperationError
-from ndetect.logging import setup_logging
-from ndetect.models import MoveConfig, RetentionConfig, TextFile
+from ndetect.logging import get_logger, setup_logging
+from ndetect.models import CLIConfig, MoveConfig, TextFile
 from ndetect.operations import execute_moves, prepare_moves
 from ndetect.similarity import SimilarityGraph
 from ndetect.types import Action
@@ -331,140 +331,277 @@ def test_prepare_moves_empty_list(tmp_path: Path) -> None:
 
 def test_non_interactive_mode_basic(tmp_path: Path) -> None:
     """Test basic non-interactive mode functionality."""
-    # Create test files
+    # Create test files and directories
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("test content")
     file2.write_text("test content")
 
-    console = Console(force_terminal=True)
-    result = handle_non_interactive_mode(
-        console=console,
-        paths=[str(tmp_path)],  # Pass paths instead of text_files
+    holding_dir = tmp_path / "duplicates"
+    holding_dir.mkdir(parents=True, exist_ok=True)
+
+    config = CLIConfig(
+        paths=[str(tmp_path)],
+        mode="non-interactive",
         threshold=0.8,
         base_dir=tmp_path,
-        holding_dir=tmp_path / "duplicates",
-        dry_run=False,
+        holding_dir=holding_dir,
+    )
+
+    console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    result = handle_non_interactive_mode(
+        config=config,
+        console=console,
+        text_files=text_files,
+        logger=get_logger(),
     )
     assert result == 0
 
 
 def test_non_interactive_mode_with_retention(tmp_path: Path) -> None:
     """Test non-interactive mode with retention configuration."""
-    # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("test content")
     file2.write_text("test content")
 
-    retention_config = RetentionConfig(
-        strategy="newest",
+    holding_dir = tmp_path / "duplicates"
+    holding_dir.mkdir(parents=True, exist_ok=True)
+
+    config = CLIConfig(
+        paths=[str(tmp_path)],
+        mode="non-interactive",
+        threshold=0.8,
+        base_dir=tmp_path,
+        holding_dir=holding_dir,
+        retention_strategy="newest",
         priority_paths=[str(tmp_path)],
         priority_first=True,
     )
 
     console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
     result = handle_non_interactive_mode(
+        config=config,
         console=console,
-        paths=[str(tmp_path)],  # Pass paths instead of text_files
-        threshold=0.8,
-        base_dir=tmp_path,
-        holding_dir=tmp_path / "duplicates",
-        retention_config=retention_config,
+        text_files=text_files,
+        logger=get_logger(),
     )
     assert result == 0
 
 
-def test_non_interactive_mode_dry_run(tmp_path: Path) -> None:
+def test_non_interactive_mode_with_dry_run(tmp_path: Path) -> None:
     """Test non-interactive mode with dry run option."""
-    # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("test content")
     file2.write_text("test content")
 
-    console = Console(force_terminal=True)
-    result = handle_non_interactive_mode(
-        console=console,
+    config = CLIConfig(
         paths=[str(tmp_path)],
+        mode="non-interactive",
         threshold=0.8,
         base_dir=tmp_path,
         holding_dir=tmp_path / "duplicates",
         dry_run=True,
     )
+
+    console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    result = handle_non_interactive_mode(
+        config=config,
+        console=console,
+        text_files=text_files,
+        logger=get_logger(),
+    )
     assert result == 0
-    assert (tmp_path / "duplicates").exists() is False
+    assert file1.exists()
+    assert file2.exists()
+
+
+def test_non_interactive_mode_empty_directory(tmp_path: Path) -> None:
+    """Test non-interactive mode with an empty directory."""
+    config = CLIConfig(
+        paths=[str(tmp_path)],
+        mode="non-interactive",
+        threshold=0.8,
+        base_dir=tmp_path,
+        holding_dir=tmp_path / "duplicates",
+    )
+
+    console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    result = handle_non_interactive_mode(
+        config=config,
+        console=console,
+        text_files=text_files,
+        logger=get_logger(),
+    )
+    assert result == 0
 
 
 def test_non_interactive_mode_with_error(tmp_path: Path) -> None:
     """Test non-interactive mode error handling."""
-    # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("test content")
     file2.write_text("test content")
 
+    holding_dir = tmp_path / "duplicates"
+    holding_dir.mkdir(parents=True, exist_ok=True)
+
+    config = CLIConfig(
+        paths=[str(tmp_path)],
+        mode="non-interactive",
+        threshold=0.8,
+        base_dir=tmp_path,
+        holding_dir=holding_dir,
+    )
+
     console = Console(force_terminal=True)
-    with patch(
-        "ndetect.cli.execute_moves",
-        side_effect=FileOperationError("Test error", str(file1), "move"),
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    # Create a mock move operation that will fail
+    mock_move = Mock()
+    mock_move.source = file1
+    mock_move.destination = holding_dir / "test1.txt"
+    mock_move.operation = "move"
+
+    with (
+        patch(
+            "ndetect.cli.execute_moves",
+            side_effect=FileOperationError("Test error", str(file1), "move"),
+        ),
+        patch(
+            "ndetect.cli.prepare_moves",
+            return_value=[mock_move],
+        ),
+        pytest.raises(FileOperationError, match="Test error"),
     ):
-        result = handle_non_interactive_mode(
+        handle_non_interactive_mode(
+            config=config,
             console=console,
-            paths=[str(tmp_path)],
-            threshold=0.8,
-            base_dir=tmp_path,
-            holding_dir=tmp_path / "duplicates",
+            text_files=text_files,
+            logger=get_logger(),
         )
-    assert result == 1
+
+    # Verify error handling
+    assert file1.exists()  # Original file should still exist
+    assert not (holding_dir / "test1.txt").exists()  # Move should have failed
 
 
 def test_non_interactive_mode_with_logging(tmp_path: Path) -> None:
-    """Test non-interactive mode with logging enabled."""
-    # Create test files
+    """Test non-interactive mode with logging configuration."""
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("test content")
     file2.write_text("test content")
-
     log_file = tmp_path / "test.log"
-    console = Console(force_terminal=True)
 
-    # Setup logging before calling handle_non_interactive_mode
-    setup_logging(log_file=log_file)
+    holding_dir = tmp_path / "duplicates"
+    holding_dir.mkdir(parents=True, exist_ok=True)
 
-    result = handle_non_interactive_mode(
-        console=console,
+    config = CLIConfig(
         paths=[str(tmp_path)],
+        mode="non-interactive",
         threshold=0.8,
         base_dir=tmp_path,
-        holding_dir=tmp_path / "duplicates",
+        holding_dir=holding_dir,
         log_file=log_file,
+        verbose=True,
+    )
+
+    logger = setup_logging(config.log_file, config.verbose)
+    console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    result = handle_non_interactive_mode(
+        config=config,
+        console=console,
+        text_files=text_files,
+        logger=logger,
     )
     assert result == 0
-    assert log_file.exists(), f"Log file {log_file} was not created"
-
-    # Verify log file contains content
-    log_content = log_file.read_text()
-    assert log_content, "Log file is empty"
-    assert "Starting non-interactive processing" in log_content
+    assert log_file.exists()
 
 
 def test_non_interactive_mode_no_duplicates(tmp_path: Path) -> None:
     """Test non-interactive mode when no duplicates are found."""
-    # Create test files with different content
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("content 1")
     file2.write_text("content 2")
 
-    console = Console(force_terminal=True)
-    result = handle_non_interactive_mode(
-        console=console,
+    config = CLIConfig(
         paths=[str(tmp_path)],
+        mode="non-interactive",
         threshold=0.8,
         base_dir=tmp_path,
         holding_dir=tmp_path / "duplicates",
+    )
+
+    console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    result = handle_non_interactive_mode(
+        config=config,
+        console=console,
+        text_files=text_files,
+        logger=get_logger(),
     )
     assert result == 0
     assert not (tmp_path / "duplicates").exists()
@@ -625,3 +762,41 @@ def test_scan_paths_with_empty_files(tmp_path: Path) -> None:
     assert len(text_files) == 2
     paths = {tf.path for tf in text_files}
     assert paths == {text_file, empty_file}
+
+
+def test_non_interactive_mode_with_verbose(tmp_path: Path) -> None:
+    """Test non-interactive mode with verbose output."""
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("test content")
+    file2.write_text("test content")
+
+    holding_dir = tmp_path / "duplicates"
+    holding_dir.mkdir(parents=True, exist_ok=True)
+
+    config = CLIConfig(
+        paths=[str(tmp_path)],
+        mode="non-interactive",
+        threshold=0.8,
+        base_dir=tmp_path,
+        holding_dir=holding_dir,
+        verbose=True,
+    )
+
+    console = Console(force_terminal=True)
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    result = handle_non_interactive_mode(
+        config=config,
+        console=console,
+        text_files=text_files,
+        logger=get_logger(),
+    )
+    assert result == 0

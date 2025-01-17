@@ -143,3 +143,81 @@ class FileAnalyzerConfig:
 
         if self.max_symlink_depth <= 0:
             raise ValueError("max_symlink_depth must be positive")
+
+
+@dataclass
+class CLIConfig:
+    """Unified configuration for CLI operations."""
+
+    # Required settings
+    paths: List[str]
+
+    # Mode settings
+    mode: str = "interactive"
+    dry_run: bool = False
+    verbose: bool = False
+    log_file: Optional[Path] = None
+
+    # Analysis settings
+    threshold: float = 0.85
+    min_printable_ratio: float = 0.8
+    num_perm: int = 128
+    shingle_size: int = 5
+    chunk_size: int = 1024 * 1024
+    max_workers: Optional[int] = None
+
+    # File handling settings
+    follow_symlinks: bool = True
+    max_symlink_depth: int = 10
+    skip_empty: bool = True
+
+    # Preview settings
+    preview_chars: int = 100
+    preview_lines: int = 3
+
+    # Move settings
+    holding_dir: Path = Path("holding")
+    flat_holding: bool = False
+    base_dir: Optional[Path] = None
+
+    # Retention settings
+    retention_strategy: str = "newest"
+    priority_paths: Optional[List[str]] = None
+    priority_first: bool = True
+
+    def __post_init__(self) -> None:
+        """Validate configuration."""
+        if not self.paths:
+            raise ValueError("At least one path must be provided")
+
+        if self.threshold <= 0 or self.threshold > 1:
+            raise ValueError("Threshold must be between 0 and 1")
+
+        if self.min_printable_ratio <= 0 or self.min_printable_ratio > 1:
+            raise ValueError("min_printable_ratio must be between 0 and 1")
+
+    @property
+    def retention_config(self) -> Optional[RetentionConfig]:
+        """Create RetentionConfig from settings."""
+        return RetentionConfig(
+            strategy=self.retention_strategy,
+            priority_paths=self.priority_paths or [],
+            priority_first=self.priority_first,
+        )
+
+    @property
+    def move_config(self) -> MoveConfig:
+        """Create MoveConfig from settings."""
+        return MoveConfig(
+            holding_dir=self.holding_dir,
+            preserve_structure=not self.flat_holding,
+            dry_run=self.dry_run,
+        )
+
+    @property
+    def preview_config(self) -> PreviewConfig:
+        """Create PreviewConfig from settings."""
+        return PreviewConfig(
+            max_chars=self.preview_chars,
+            max_lines=self.preview_lines,
+        )

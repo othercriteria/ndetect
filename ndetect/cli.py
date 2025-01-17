@@ -13,8 +13,12 @@ from ndetect import __version__
 from ndetect.exceptions import (
     handle_error,
 )
-from ndetect.logging import StructuredLogger, get_logger, setup_logging
-from ndetect.models import FileAnalyzerConfig, MoveConfig, RetentionConfig, TextFile
+from ndetect.logging import StructuredLogger, setup_logging
+from ndetect.models import (
+    CLIConfig,
+    RetentionConfig,
+    TextFile,
+)
 from ndetect.operations import MoveOperation, execute_moves, prepare_moves
 from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
@@ -31,8 +35,8 @@ __all__ = [
 logger = logging.getLogger(__name__)
 
 
-def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    """Parse command line arguments."""
+def parse_args(argv: Optional[List[str]] = None) -> CLIConfig:
+    """Parse command line arguments into unified config."""
     parser = argparse.ArgumentParser(
         description="Detect and manage similar text files."
     )
@@ -167,54 +171,63 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Maximum depth when following symbolic links (default: 10)",
     )
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    # Convert args namespace to CLIConfig
+    return CLIConfig(
+        mode=args.mode,
+        paths=args.paths,
+        threshold=args.threshold,
+        dry_run=args.dry_run,
+        verbose=args.verbose,
+        log_file=args.log_file,
+        min_printable_ratio=args.min_printable_ratio,
+        num_perm=args.num_perm,
+        shingle_size=args.shingle_size,
+        follow_symlinks=args.follow_symlinks,
+        max_symlink_depth=args.max_symlink_depth,
+        skip_empty=args.skip_empty,
+        preview_chars=args.preview_chars,
+        preview_lines=args.preview_lines,
+        holding_dir=args.holding_dir,
+        flat_holding=args.flat_holding,
+        retention_strategy=args.retention,
+        priority_paths=args.priority_paths,
+        priority_first=args.priority_first,
+        max_workers=args.max_workers,
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI."""
-    args = parse_args(argv if argv is not None else None)
-
-    # Initialize global logger
-    logger = setup_logging(args.log_file, args.verbose)
-
-    console = Console()
     try:
-        if args.mode == "interactive":
+        config = parse_args(argv if argv is not None else None)
+        logger = setup_logging(config.log_file, config.verbose)
+        console = Console()
+
+        # Scan files first (common to both modes)
+        text_files = scan_paths(
+            paths=config.paths,
+            min_printable_ratio=config.min_printable_ratio,
+            num_perm=config.num_perm,
+            shingle_size=config.shingle_size,
+            follow_symlinks=config.follow_symlinks,
+            max_workers=config.max_workers,
+        )
+
+        if config.mode == "interactive":
             return handle_interactive_mode(
-                ui=InteractiveUI(
-                    console=console,
-                    move_config=MoveConfig(
-                        holding_dir=args.holding_dir,
-                        dry_run=args.dry_run,
-                    ),
-                    logger=logger,
-                ),
-                text_files=scan_paths(
-                    paths=args.paths,
-                    min_printable_ratio=args.min_printable_ratio,
-                    num_perm=args.num_perm,
-                    shingle_size=args.shingle_size,
-                    follow_symlinks=args.follow_symlinks,
-                    max_workers=args.max_workers,
-                ),
-                threshold=args.threshold,
+                config=config,
+                console=console,
+                text_files=text_files,
+                logger=logger,
             )
         else:
             return handle_non_interactive_mode(
+                config=config,
                 console=console,
-                paths=args.paths,
-                threshold=args.threshold,
-                base_dir=args.base_dir,
-                holding_dir=args.holding_dir,
-                retention_config=args.retention_config,
-                dry_run=args.dry_run,
-                log_file=args.log_file,
-                verbose=args.verbose,
-                min_printable_ratio=args.min_printable_ratio,
-                num_perm=args.num_perm,
-                shingle_size=args.shingle_size,
-                follow_symlinks=args.follow_symlinks,
-                max_workers=args.max_workers,
+                text_files=text_files,
+                logger=logger,
             )
     except Exception as e:
         return handle_error(console, e)
@@ -269,16 +282,25 @@ def process_group(
 
 
 def handle_interactive_mode(
-    ui: InteractiveUI, text_files: List[TextFile], threshold: float
+    config: CLIConfig,
+    console: Console,
+    text_files: List[TextFile],
+    logger: StructuredLogger,
 ) -> int:
     """Handle interactive mode with rich UI."""
-    logger = setup_logging(None)  # Add logger for interactive mode
+    ui = InteractiveUI(
+        console=console,
+        move_config=config.move_config,
+        preview_config=config.preview_config,
+        retention_config=config.retention_config,
+        logger=logger,
+    )
 
     logger.info_with_fields(
         "Starting interactive mode",
         operation="start",
         total_files=len(text_files),
-        threshold=threshold,
+        threshold=config.threshold,
     )
 
     with Progress(
@@ -286,46 +308,11 @@ def handle_interactive_mode(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=ui.console,
+        console=console,
     ) as progress:
-        graph = build_similarity_graph(text_files, threshold, progress)
-        logger.info_with_fields(
-            "Graph built", operation="analysis", similar_groups=len(graph.get_groups())
-        )
+        graph = build_similarity_graph(text_files, config.threshold, progress)
 
-    while True:
-        groups = graph.get_groups()
-        if not groups:
-            if ui.pending_moves:
-                logger.info_with_fields(
-                    "Processing pending moves",
-                    operation="cleanup",
-                    total_moves=len(ui.pending_moves),
-                )
-                return handle_cleanup_phase(ui)
-            # Log completion for system tracking
-            logger.info_with_fields(
-                "Finished processing all groups", operation="complete", status="success"
-            )
-            # Single user-facing message
-            ui.console.print("[green]No more duplicate groups found[/green]")
-            return 0
-
-        logger.info_with_fields(
-            "Processing group", operation="group", group_size=len(groups[0].files)
-        )
-        action = process_group(ui, graph, groups[0])
-        if action == Action.QUIT:
-            logger.info_with_fields("User quit", operation="complete", status="quit")
-            return 0
-        elif action == Action.KEEP:
-            logger.info_with_fields(
-                "Group kept",
-                operation="group",
-                status="kept",
-                files=[str(f) for f in groups[0].files],
-            )
-            graph.remove_group(groups[0].files)
+    return process_interactive_groups(ui, graph)
 
 
 def process_similar_groups(
@@ -386,117 +373,54 @@ def process_similar_groups(
 
 
 def handle_non_interactive_mode(
+    config: CLIConfig,
     console: Console,
-    paths: List[str],
-    threshold: float,
-    base_dir: Path,
-    holding_dir: Path,
-    retention_config: Optional[RetentionConfig] = None,
-    dry_run: bool = False,
-    log_file: Optional[Path] = None,
-    verbose: bool = False,
-    min_printable_ratio: float = 0.8,
-    num_perm: int = 128,
-    shingle_size: int = 5,
-    follow_symlinks: bool = True,
-    max_workers: Optional[int] = None,
+    text_files: List[TextFile],
+    logger: StructuredLogger,
 ) -> int:
     """Handle non-interactive mode operations."""
-    # Setup logging with verbose flag
-    setup_logging(log_file=log_file, verbose=verbose)
-    logger = get_logger()
-
-    logger.info_with_fields(
-        "Starting non-interactive processing",
-        operation="start",
-        verbose=verbose,
-    )
-
-    try:
-        # Create analyzer config
-        analyzer_config = FileAnalyzerConfig(
-            min_printable_ratio=min_printable_ratio,
-            num_perm=num_perm,
-            shingle_size=shingle_size,
-            follow_symlinks=follow_symlinks,
-            max_workers=max_workers,
+    if not text_files:
+        logger.info_with_fields(
+            "No valid text files found",
+            operation="complete",
+            status="no_files",
         )
-
-        # Scan files
-        text_files = scan_paths(
-            paths=paths,
-            min_printable_ratio=analyzer_config.min_printable_ratio,
-            num_perm=analyzer_config.num_perm,
-            shingle_size=analyzer_config.shingle_size,
-            follow_symlinks=analyzer_config.follow_symlinks,
-            max_workers=analyzer_config.max_workers,
-        )
-        logger.info_with_fields("File analysis complete")
-
-        if not text_files:
-            logger.info_with_fields(
-                "No valid text files found",
-                operation="complete",
-                status="no_files",
-            )
-            return 0
-
-        # Find similar files using SimilarityGraph
-        graph = SimilarityGraph(threshold=threshold)
-        graph.add_files(text_files)
-        similar_groups = list(graph.get_groups())
-
-        if not similar_groups:
-            logger.info_with_fields(
-                "No similar files found",
-                operation="complete",
-                status="no_groups",
-            )
-            return 0
-
-        # Prepare moves for each group
-        all_moves = []
-        for group in similar_groups:
-            group_moves = prepare_moves(
-                group.files,
-                base_dir=base_dir,
-                holding_dir=holding_dir,
-                retention_config=retention_config,
-            )
-            all_moves.extend(group_moves)
-
-        if not all_moves:
-            logger.info_with_fields(
-                "No moves to execute",
-                operation="complete",
-                status="no_moves",
-            )
-            return 0
-
-        # Execute moves in non-interactive mode
-        if not dry_run:
-            logger.info_with_fields(
-                "Executing moves",
-                operation="move",
-                total_moves=len(all_moves),
-            )
-            execute_moves(all_moves)
-            logger.info_with_fields(
-                "Moves completed successfully",
-                operation="complete",
-                status="success",
-            )
-
         return 0
 
-    except Exception as e:
-        logger.error_with_fields(
-            "Error in non-interactive mode",
-            operation="error",
-            error=str(e),
-            error_type=type(e).__name__,
+    graph = SimilarityGraph(threshold=config.threshold)
+    graph.add_files(text_files)
+    similar_groups = list(graph.get_groups())
+
+    if not similar_groups:
+        logger.info_with_fields(
+            "No similar files found",
+            operation="complete",
+            status="no_groups",
         )
-        return handle_error(console, e)
+        return 0
+
+    moves = process_similar_groups(
+        console=console,
+        graph=graph,
+        base_dir=config.base_dir,
+        holding_dir=config.holding_dir,
+        retention_config=config.retention_config,
+        dry_run=config.dry_run,
+        logger=logger,
+    )
+
+    if not moves:
+        return 0
+
+    if not config.dry_run:
+        execute_moves(moves)
+        logger.info_with_fields(
+            "Moves completed successfully",
+            operation="complete",
+            status="success",
+        )
+
+    return 0
 
 
 def handle_cleanup_phase(ui: InteractiveUI) -> int:
@@ -510,6 +434,16 @@ def handle_cleanup_phase(ui: InteractiveUI) -> int:
         return 0
     except Exception as e:
         return handle_error(ui.console, e)
+
+
+def process_interactive_groups(ui: InteractiveUI, graph: SimilarityGraph) -> int:
+    """Process groups in interactive mode."""
+    for group in graph.get_groups():
+        action = process_group(ui, graph, group)
+        if action == Action.QUIT:
+            break
+
+    return handle_cleanup_phase(ui)
 
 
 if __name__ == "__main__":

@@ -15,9 +15,17 @@ from rich.text import Text
 from ndetect.exceptions import DiskSpaceError, FileOperationError, PermissionError
 from ndetect.logging import StructuredLogger, get_logger
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
-from ndetect.operations import MoveOperation, delete_files, prepare_moves, select_keeper
+from ndetect.operations import (
+    MoveOperation,
+    delete_files,
+    execute_moves,
+    prepare_moves,
+    select_keeper,
+)
 from ndetect.types import Action
 from ndetect.utils import format_preview_text
+
+logger = get_logger()
 
 
 class InteractiveUI:
@@ -88,6 +96,17 @@ class InteractiveUI:
             )
 
         self.console.print(table)
+
+        # Automatically select keeper if retention_config is available
+        if self.retention_config:
+            keeper = select_keeper(files, self.retention_config)
+            self.console.print(f"\n[green]Default keeper selected: {keeper}[/green]")
+            self.logger.info_with_fields(
+                "Keeper automatically selected for group",
+                operation="select_keeper",
+                keeper=str(keeper),
+                group_id=group_id,
+            )
 
     def prompt_for_action(self) -> Action:
         """Prompt for user action."""
@@ -321,35 +340,102 @@ class InteractiveUI:
             Panel(table, title="Pairwise Similarities", border_style="blue")
         )
 
-    def handle_delete(self, files: List[Path]) -> None:
-        """Handle file deletion with confirmation."""
-        try:
-            if not files:
-                return
+    def show_delete_preview(self, files: List[Path]) -> None:
+        """Show preview of files to be deleted."""
+        panel = Panel(
+            "\n".join(str(f) for f in files),
+            title="Files to Delete",
+            subtitle="Delete Preview",
+        )
+        self.console.print(panel)
 
-            self.logger.info_with_fields(
-                "Preparing delete operation",
-                operation="delete_prepare",
-                files=[str(f) for f in files],
+    def handle_delete(self, files: List[Path]) -> None:
+        """Handle deletion of files."""
+        logger.info_with_fields("Preparing delete operation", operation="delete")
+
+        # First use select_keeper to determine which files to delete
+        files_to_delete = files
+        if self.retention_config:
+            keeper = select_keeper(files, self.retention_config)
+            files_to_delete = [f for f in files if f != keeper]
+            self.console.print(f"\n[green]Keeping: {keeper}[/green]")
+
+        if not files_to_delete:
+            self.console.print("[yellow]No files selected for deletion[/yellow]")
+            return
+
+        # Show preview of files to be deleted
+        self.show_delete_preview(files_to_delete)
+
+        logger.info_with_fields("User confirmation requested", operation="delete")
+        if not self.confirm("Are you sure you want to delete these files?"):
+            return
+
+        logger.info_with_fields("Starting delete operations", operation="delete")
+        try:
+            delete_files(files_to_delete)
+            self.console.print(f"Successfully deleted {len(files_to_delete)} files")
+            logger.info_with_fields(
+                "Successfully deleted files",
+                operation="delete",
+                count=len(files_to_delete),
+            )
+        except FileOperationError as e:
+            self.show_error(f"Failed to delete files: {e}")
+            logger.error_with_fields(
+                "Failed to delete files", operation="delete", error=str(e)
             )
 
-            # Show preview of files to be deleted
-            table = Table(show_header=True, header_style="bold red")
-            table.add_column("Files to Delete", style="red")
-            for file in files:
-                table.add_row(str(file))
+    def show_move_preview(self, files: List[Path]) -> None:
+        """Show preview of files to be moved."""
+        panel = Panel(
+            "\n".join(str(f) for f in files),
+            title="Files to Move",
+            subtitle="Move Preview",
+        )
+        self.console.print(panel)
 
-            self.console.print(Panel(table, title="Delete Preview", border_style="red"))
+    def handle_move(self, files: List[Path]) -> None:
+        """Handle moving files to holding directory."""
+        if not self.move_config:
+            self.show_error("Move operation not configured")
+            return
 
-            if not self.confirm("Are you sure you want to delete these files?"):
-                self.logger.info_with_fields(
-                    "Delete operation cancelled by user",
-                    operation="delete_cancel",
-                )
-                return
+        logger.info_with_fields("Preparing move operation", operation="move")
 
-            delete_files(files)
-            self.show_success(f"Successfully deleted {len(files)} files")
+        # First use select_keeper to determine which files to move
+        files_to_move = files
+        if self.retention_config:
+            keeper = select_keeper(files, self.retention_config)
+            files_to_move = [f for f in files if f != keeper]
+            self.console.print(f"\n[green]Keeping: {keeper}[/green]")
 
+        if not files_to_move:
+            self.console.print("[yellow]No files selected for moving[/yellow]")
+            return
+
+        # Show preview of files to be moved
+        self.show_move_preview(files_to_move)
+
+        logger.info_with_fields("User confirmation requested", operation="move")
+        if not self.confirm("Are you sure you want to move these files?"):
+            return
+
+        logger.info_with_fields("Starting move operations", operation="move")
+        try:
+            moves = prepare_moves(
+                files=files_to_move,
+                holding_dir=self.move_config.holding_dir,
+                preserve_structure=self.move_config.preserve_structure,
+            )
+            if not self.move_config.dry_run:
+                execute_moves(moves)
+            self.console.print(f"Successfully moved {len(files_to_move)} files")
+            logger.info_with_fields(
+                "Successfully moved files", operation="move", count=len(files_to_move)
+            )
         except FileOperationError as e:
-            self.handle_file_operation_error(e, "delete")
+            self.show_error(f"Failed to move files: {e}")
+            logger.error_with_fields(
+                "Failed to move files", operation="move", error=str(e)
+            )
