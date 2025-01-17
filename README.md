@@ -8,7 +8,7 @@
 
 ### Install
 
-Assume you have a working Nix/flakes/direnv setup.
+#### Nix/flakes/direnv
 
 ```bash
 git clone git@github.com:othercriteria/ndetect.git
@@ -16,6 +16,21 @@ cd ndetect
 direnv allow
 ndetect .
 ```
+
+#### System Python (virtualenv)
+
+```bash
+git clone git@github.com:othercriteria/ndetect.git
+cd ndetect
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+ndetect .  # If installation was successful
+# OR
+python -m ndetect .  # Always works as long as package is installed
+```
+
+### Usage
 
 There are enough text files in the repo to get started using the interactive mode.
 
