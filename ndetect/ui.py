@@ -3,7 +3,7 @@
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from rich.console import Console
 from rich.panel import Panel
@@ -38,18 +38,14 @@ class InteractiveUI:
         preview_config: Optional[PreviewConfig] = None,
         retention_config: Optional[RetentionConfig] = None,
         logger: Optional[StructuredLogger] = None,
-        base_dir: Optional[Path] = None,
     ) -> None:
         """Initialize the UI."""
         self.console = console
         self.move_config = move_config
-        self.base_dir = base_dir
         self.preview_config = preview_config or PreviewConfig()
-        self.retention_config: RetentionConfig = retention_config or RetentionConfig(
-            strategy="newest"
-        )
+        self.retention_config = retention_config or RetentionConfig(strategy="newest")
+        self.logger = logger or get_logger()
         self.pending_moves: List[MoveOperation] = []
-        self.logger = logger or get_logger()  # Use passed logger or get global instance
 
     def show_scan_progress(self, paths: List[str]) -> None:
         """Show progress while scanning files."""
@@ -174,14 +170,11 @@ class InteractiveUI:
 
     def add_pending_move(self, move: MoveOperation) -> None:
         """Add a move operation to the pending list."""
-        self.logger.info_with_fields(
-            "Adding pending move",
-            operation="pending_move",
-            source=str(move.source),
-            destination=str(move.destination),
-            group_id=move.group_id,
-        )
         self.pending_moves.append(move)
+
+    def clear_pending_moves(self) -> None:
+        """Clear all pending move operations."""
+        self.pending_moves.clear()
 
     def show_success(self, message: str) -> None:
         """Show a success message."""
@@ -371,33 +364,18 @@ class InteractiveUI:
             return False
 
         files_to_process = files
-        keeper = None
-
-        # Try to select keeper if retention config exists
-        if self.retention_config is not None:
-            try:
-                self.logger.info_with_fields(
-                    "Selecting keeper file",
-                    operation="select_keeper",
-                )
-                keeper = select_keeper(files, self.retention_config)
-                self.logger.info_with_fields(
-                    "Selected keeper by strategy",
-                    operation="select_keeper",
-                    keeper=str(keeper),
-                )
-                # Default selection is all files except keeper
-                files_to_process = [f for f in files if f != keeper]
-                self.console.print(
-                    f"\n[green]Default keeper selected: {keeper}[/green]"
-                )
-            except Exception as e:
-                self.logger.error_with_fields(
-                    f"Failed to select keeper: {e}",
-                    operation="select_keeper",
-                    error=str(e),
-                )
-                return False
+        try:
+            keeper = select_keeper(files, self.retention_config)
+            # Default selection is all files except keeper
+            files_to_process = [f for f in files if f != keeper]
+            self.console.print(f"\n[green]Selected keeper: {keeper}[/green]")
+        except Exception as e:
+            self.logger.error_with_fields(
+                f"Failed to select keeper: {e}",
+                operation="select_keeper",
+                error=str(e),
+            )
+            return False
 
         # Allow user to override the selection
         try:
@@ -409,6 +387,8 @@ class InteractiveUI:
             )
             if selected_indices:  # Only override if user provided input
                 files_to_process = [files[i - 1] for i in selected_indices]
+                if keeper in files_to_process:
+                    files_to_process.remove(keeper)
         except ValueError as e:
             self.console.print(f"[red]Invalid selection: {e}[/red]")
             return False
@@ -424,10 +404,6 @@ class InteractiveUI:
             msg = confirm_message
 
         # Confirm operation
-        self.logger.info_with_fields(
-            "User confirmation requested",
-            operation=operation,
-        )
         if not Confirm.ask(msg):
             return False
 
@@ -438,16 +414,25 @@ class InteractiveUI:
             )
             return True
         except Exception as e:
-            self.console.print(f"[red]Error during {operation}: {str(e)}[/red]")
+            self.console.print(f"[red]Error during {operation}: {e}[/red]")
             return False
 
     def handle_delete(self, files: List[Path]) -> bool:
-        """Handle deletion of selected files."""
+        """Handle deletion of files."""
+        if not files:
+            return False
+
+        # Display files with numbers
+        self.display_files(files)
+
         return self._handle_file_operation(
             files,
             "delete",
             delete_files,
-            lambda files: f"Delete {len(files)} files? This cannot be undone!",
+            lambda files_to_delete: (
+                f"Delete {len(files_to_delete)} files? "
+                "[red]This action cannot be undone[/red]"
+            ),
         )
 
     def handle_move(self, files: List[Path]) -> bool:
@@ -473,48 +458,61 @@ class InteractiveUI:
         )
 
     def _prompt_for_indices(
-        self, items: List[Any], prompt: str, keeper: Optional[Path] = None
+        self, files: List[Path], prompt: str, keeper: Optional[Path] = None
     ) -> List[int]:
-        """Prompt user for indices from a list of items.
-
-        Args:
-            items: List of items to select from
-            prompt: Message to show user
-            keeper: Optional keeper file to use for default selection
-
-        Returns:
-            List of selected indices (1-based)
-
-        Raises:
-            ValueError: If any selected index is invalid
-        """
-        if not items:
+        """Prompt for file indices and validate input."""
+        if not files:
             return []
 
         # Get user input
         response = Prompt.ask(prompt).strip()
 
-        # If no input and we have a keeper, select all files except keeper
-        if not response and keeper is not None:
-            return [i + 1 for i, item in enumerate(items) if item != keeper]
-        elif not response:
+        # Handle empty input
+        if not response:
+            if keeper is not None:
+                # With keeper, empty input means select all except keeper
+                return [i for i, f in enumerate(files, 1) if f != keeper]
+            # Without keeper, empty input means no selection
             return []
 
+        # Parse and validate indices
         try:
-            # Parse comma-separated indices
             indices = [int(i.strip()) for i in response.split(",")]
-
-            # Validate indices
-            valid_range = range(1, len(items) + 1)
-            invalid = [i for i in indices if i not in valid_range]
-            if invalid:
-                raise ValueError(
-                    f"Invalid indices: {invalid}. Must be between 1 and {len(items)}"
-                )
-
-            return indices
-
+            valid_indices = []
+            for idx in indices:
+                if idx < 1 or idx > len(files):
+                    raise ValueError(f"Invalid index: {idx}")
+                valid_indices.append(idx)
+            return valid_indices
         except ValueError as e:
-            if "invalid literal for int()" in str(e):
-                raise ValueError("Please enter comma-separated numbers") from e
-            raise e from None
+            raise ValueError(f"Invalid input: {e}") from e
+
+    def display_files(self, files: List[Path]) -> None:
+        """Display a numbered list of files with their details."""
+        if not files:
+            return
+
+        table = Table(show_header=True, header_style="bold")
+        table.add_column("#", justify="right")
+        table.add_column("File", no_wrap=True)
+        table.add_column("Size", justify="right")
+        table.add_column("Modified", justify="right")
+
+        for i, file in enumerate(files, 1):
+            try:
+                stat = file.stat()
+                size = f"{stat.st_size:,} bytes"
+                modified = datetime.fromtimestamp(stat.st_mtime).strftime(
+                    "%Y-%m-%d %H:%M"
+                )
+                table.add_row(str(i), str(file), size, modified)
+            except OSError as e:
+                self.logger.error_with_fields(
+                    f"Failed to get file stats: {e}",
+                    operation="display",
+                    file=str(file),
+                    error=str(e),
+                )
+                table.add_row(str(i), str(file), "ERROR", "ERROR")
+
+        self.console.print(table)

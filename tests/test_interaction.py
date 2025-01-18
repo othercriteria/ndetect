@@ -43,32 +43,6 @@ def test_handle_delete_with_retention_config(tmp_path: Path) -> None:
         assert files_to_delete[0] == file1
 
 
-def test_handle_delete_no_retention_config(tmp_path: Path) -> None:
-    """Test delete handling without retention config."""
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    file1.write_text("content1")
-    file2.write_text("content2")
-
-    console = Console(force_terminal=True)
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
-    ui = InteractiveUI(console=console, move_config=move_config, retention_config=None)
-
-    with (
-        patch.object(Prompt, "ask", return_value="1,2"),
-        patch("ndetect.ui.Confirm.ask", return_value=True),
-        patch("ndetect.ui.delete_files") as mock_delete,
-    ):
-        result = ui.handle_delete([file1, file2])
-
-        assert result is True
-        mock_delete.assert_called_once()
-        files_to_delete = mock_delete.call_args[0][0]
-        assert len(files_to_delete) == 2
-        assert file1 in files_to_delete
-        assert file2 in files_to_delete
-
-
 def test_handle_delete_retention_empty_selection(tmp_path: Path) -> None:
     """Test delete handling when retention config results in no files to delete."""
     file1 = tmp_path / "test.txt"
@@ -135,7 +109,7 @@ def test_handle_delete_invalid_selection(tmp_path: Path) -> None:
 
     console = Console(force_terminal=True)
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
-    ui = InteractiveUI(console=console, move_config=move_config, retention_config=None)
+    ui = InteractiveUI(console=console, move_config=move_config)
 
     # Test invalid numeric input
     with (
