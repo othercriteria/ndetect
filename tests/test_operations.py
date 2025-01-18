@@ -1,6 +1,8 @@
 import builtins
 import os
 import shutil
+import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any, List
 from unittest.mock import patch
@@ -12,7 +14,13 @@ from ndetect.cli import handle_non_interactive_mode
 from ndetect.exceptions import FileOperationError, PermissionError
 from ndetect.logging import get_logger
 from ndetect.models import CLIConfig, RetentionConfig
-from ndetect.operations import MoveOperation, delete_files, select_keeper
+from ndetect.operations import (
+    MoveOperation,
+    delete_files,
+    execute_moves,
+    prepare_moves,
+    select_keeper,
+)
 from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
 
@@ -265,3 +273,75 @@ def test_select_keeper_all_strategies(tmp_path: Path) -> None:
         config = RetentionConfig(strategy=strategy)
         keeper = select_keeper([file1], config)
         assert keeper == file1
+
+
+def test_prepare_moves_with_retention_config(tmp_path: Path) -> None:
+    """Test prepare_moves respects retention config when preparing moves."""
+    # Create test files with different timestamps
+    file1 = tmp_path / "old.txt"
+    file2 = tmp_path / "new.txt"
+    file1.write_text("old content")
+    file2.write_text("new content")
+
+    # Set file2 as newer
+    current_time = time.time()
+    os.utime(file1, (current_time - 100, current_time - 100))
+    os.utime(file2, (current_time, current_time))
+
+    # Configure retention to keep newest
+    retention_config = RetentionConfig(strategy="newest")
+    holding_dir = tmp_path / "duplicates"
+
+    moves = prepare_moves(
+        files=[file1, file2],
+        holding_dir=holding_dir,
+        preserve_structure=True,
+        retention_config=retention_config,
+    )
+
+    # Verify only the older file is moved
+    assert len(moves) == 1, "Should only move the older file"
+    assert moves[0].source == file1, "Should move the older file"
+    assert moves[0].destination == holding_dir / "old.txt"
+    assert not moves[0].executed, "Move should not be marked as executed yet"
+
+
+def test_execute_moves_updates_status(tmp_path: Path) -> None:
+    """Test execute_moves properly updates move operation status."""
+    # Create test files
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    dest_dir = tmp_path / "dest"
+    dest_dir.mkdir()
+
+    # Create move operations
+    moves = [
+        MoveOperation(
+            source=file1,
+            destination=dest_dir / "test1.txt",
+            group_id=1,
+            timestamp=datetime.now(),
+            executed=False,
+        ),
+        MoveOperation(
+            source=file2,
+            destination=dest_dir / "test2.txt",
+            group_id=1,
+            timestamp=datetime.now(),
+            executed=False,
+        ),
+    ]
+
+    # Execute moves and verify status
+    execute_moves(moves)
+
+    assert all(
+        move.executed for move in moves
+    ), "All moves should be marked as executed"
+    assert not file1.exists(), "Source file1 should be moved"
+    assert not file2.exists(), "Source file2 should be moved"
+    assert (dest_dir / "test1.txt").exists(), "Destination file1 should exist"
+    assert (dest_dir / "test2.txt").exists(), "Destination file2 should exist"

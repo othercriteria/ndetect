@@ -3,7 +3,7 @@
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from rich.console import Console
 from rich.panel import Panel
@@ -362,51 +362,81 @@ class InteractiveUI:
     def _handle_file_operation(
         self,
         files: List[Path],
-        operation_name: str,
-        execute_operation: Callable[[List[Path]], None],
-        get_confirmation_message: Callable[[List[Path]], str],
+        operation: str,
+        operation_func: Callable[[List[Path]], None],
+        confirm_message: Union[str, Callable[[List[Path]], str]],
     ) -> bool:
-        """Handle common file operation logic (delete/move).
-
-        Args:
-            files: List of files to operate on
-            operation_name: Name of operation for display ("delete" or "move")
-            execute_operation: Function to execute the operation
-            get_confirmation_message: Function to get confirmation message
-
-        Returns:
-            bool: True if operation was successful, False otherwise
-        """
+        """Handle file operations with optional retention-based selection."""
         if not files:
-            self.console.print(
-                f"[yellow]No files selected for {operation_name}[/yellow]"
-            )
             return False
 
-        # Select files to operate on based on retention config
-        keeper = select_keeper(files, self.retention_config)
-        files_to_process = [f for f in files if f != keeper]
+        files_to_process = files
+        keeper = None
+
+        # Try to select keeper if retention config exists
+        if self.retention_config is not None:
+            try:
+                self.logger.info_with_fields(
+                    "Selecting keeper file",
+                    operation="select_keeper",
+                )
+                keeper = select_keeper(files, self.retention_config)
+                self.logger.info_with_fields(
+                    "Selected keeper by strategy",
+                    operation="select_keeper",
+                    keeper=str(keeper),
+                )
+            except Exception as e:
+                self.logger.error_with_fields(
+                    f"Failed to select keeper: {e}",
+                    operation="select_keeper",
+                    error=str(e),
+                )
+                return False
+
+        # For move operations with retention config, automatically select
+        # non-keeper files
+        if operation == "move" and keeper is not None:
+            files_to_process = [f for f in files if f != keeper]
+        else:
+            # For delete operations or no retention config, let user select files
+            try:
+                selected_indices = self._prompt_for_indices(
+                    files,
+                    f"Enter file numbers to {operation} (comma-separated)",
+                    keeper=keeper,
+                )
+                files_to_process = [files[i - 1] for i in selected_indices]
+            except ValueError as e:
+                self.console.print(f"[red]Invalid selection: {e}[/red]")
+                return False
 
         if not files_to_process:
-            self.console.print(
-                f"[yellow]No files selected for {operation_name}[/yellow]"
-            )
+            self.console.print(f"[yellow]No files selected for {operation}[/yellow]")
             return False
 
-        # Show confirmation
-        msg = get_confirmation_message(files_to_process)
-        if not self.confirm(msg):
+        # Get confirmation message
+        if callable(confirm_message):
+            msg = confirm_message(files_to_process)
+        else:
+            msg = confirm_message
+
+        # Confirm operation
+        self.logger.info_with_fields(
+            "User confirmation requested",
+            operation=operation,
+        )
+        if not Confirm.ask(msg):
             return False
 
         try:
-            execute_operation(files_to_process)
+            operation_func(files_to_process)
             self.console.print(
-                f"[green]Successfully {operation_name}d {len(files_to_process)}"
-                "files[/green]"
+                f"Successfully {operation}d {len(files_to_process)} files"
             )
             return True
-        except (FileOperationError, PermissionError, DiskSpaceError) as e:
-            self.console.print(f"[red]Error during {operation_name}: {e}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Failed to {operation} files: {e}[/red]")
             return False
 
     def handle_delete(self, files: List[Path]) -> bool:
@@ -418,24 +448,71 @@ class InteractiveUI:
             lambda files: f"Delete {len(files)} files? This cannot be undone!",
         )
 
-    def handle_move(self, files: List[Path], group_id: Optional[int] = None) -> bool:
+    def handle_move(self, files: List[Path]) -> bool:
         """Handle moving selected files to holding directory."""
+        if not self.move_config:
+            self.console.print("[red]Move configuration not provided[/red]")
+            return False
 
-        def perform_moves(files_to_move: List[Path]) -> None:
-            moves = prepare_moves(
+        def prepare_moves_for_files(files_to_move: List[Path]) -> List[MoveOperation]:
+            return prepare_moves(
                 files=files_to_move,
                 holding_dir=self.move_config.holding_dir,
                 preserve_structure=self.move_config.preserve_structure,
             )
-            if not self.move_config.dry_run:
-                execute_moves(moves)
-            else:
-                self.display_move_preview(moves)
-
-        def get_move_confirmation(files_to_move: List[Path]) -> str:
-            target = self.move_config.holding_dir
-            return f"Move {len(files_to_move)} files to {target}?"
 
         return self._handle_file_operation(
-            files, "move", perform_moves, get_move_confirmation
+            files,
+            "move",
+            lambda files_to_move: execute_moves(prepare_moves_for_files(files_to_move)),
+            lambda files_to_move: (
+                f"Move {len(files_to_move)} files to {self.move_config.holding_dir}?"
+            ),
         )
+
+    def _prompt_for_indices(
+        self, items: List[Any], prompt: str, keeper: Optional[Path] = None
+    ) -> List[int]:
+        """Prompt user for indices from a list of items.
+
+        Args:
+            items: List of items to select from
+            prompt: Message to show user
+            keeper: Optional keeper file to use for default selection
+
+        Returns:
+            List of selected indices (1-based)
+
+        Raises:
+            ValueError: If any selected index is invalid
+        """
+        if not items:
+            return []
+
+        # Get user input
+        response = Prompt.ask(prompt).strip()
+
+        # If no input and we have a keeper, select all files except keeper
+        if not response and keeper is not None:
+            return [i + 1 for i, item in enumerate(items) if item != keeper]
+        elif not response:
+            return []
+
+        try:
+            # Parse comma-separated indices
+            indices = [int(i.strip()) for i in response.split(",")]
+
+            # Validate indices
+            valid_range = range(1, len(items) + 1)
+            invalid = [i for i in indices if i not in valid_range]
+            if invalid:
+                raise ValueError(
+                    f"Invalid indices: {invalid}. Must be between 1 and {len(items)}"
+                )
+
+            return indices
+
+        except ValueError as e:
+            if "invalid literal for int()" in str(e):
+                raise ValueError("Please enter comma-separated numbers") from e
+            raise e from None
