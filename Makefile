@@ -4,7 +4,7 @@ install:
 	pip install -e ".[dev]"
 
 test:
-	pytest
+	.venv/bin/python -m pytest
 
 typecheck:
 	dmypy check .

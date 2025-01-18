@@ -353,49 +353,36 @@ class InteractiveUI:
         operation_func: Callable[[List[Path]], None],
         confirm_message: Union[str, Callable[[List[Path]], str]],
     ) -> bool:
-        """Handle file operations with retention-based selection."""
-        if not group.files:
-            return False
-
-        files_to_process = [f for f in group.files if f != group.keeper]
-        self.console.print(f"\n[green]Selected keeper: {group.keeper}[/green]")
-
-        # Allow user to override the selection
+        """Handle file operations with dry run support."""
         try:
-            selected_indices = self._prompt_for_indices(
-                group.files,
-                f"Enter file numbers to {operation} (comma-separated, or Enter "
-                "to accept default)",
-                keeper=group.keeper,
+            # Get files to operate on (excluding keeper)
+            files_to_process = [f for f in group.files if f != group.keeper]
+            if not files_to_process:
+                self.console.print("[yellow]No files selected for operation[/yellow]")
+                return False
+
+            # Show confirmation message
+            msg = (
+                confirm_message
+                if isinstance(confirm_message, str)
+                else confirm_message(files_to_process)
             )
-            if selected_indices:  # Only override if user provided input
-                files_to_process = [group.files[i - 1] for i in selected_indices]
-                if group.keeper in files_to_process:
-                    files_to_process.remove(group.keeper)
-        except ValueError as e:
-            self.console.print(f"[red]Invalid selection: {e}[/red]")
-            return False
+            if not Confirm.ask(msg):
+                return False
 
-        if not files_to_process:
-            self.console.print(f"[yellow]No files selected for {operation}[/yellow]")
-            return False
+            # In dry run mode, just show what would happen
+            if self.move_config and self.move_config.dry_run:
+                self.console.print(
+                    f"[yellow]Dry run: Would {operation} these files:[/yellow]"
+                )
+                for file in files_to_process:
+                    self.console.print(f"  {file}")
+                return True
 
-        # Get confirmation message
-        if callable(confirm_message):
-            msg = confirm_message(files_to_process)
-        else:
-            msg = confirm_message
-
-        # Confirm operation
-        if not Confirm.ask(msg):
-            return False
-
-        try:
+            # Actually perform the operation
             operation_func(files_to_process)
-            self.console.print(
-                f"Successfully {operation}d {len(files_to_process)} files"
-            )
             return True
+
         except Exception as e:
             self.console.print(f"[red]Error during {operation}: {e}[/red]")
             return False

@@ -69,6 +69,9 @@
                 --exclude='^(build|dist|\.git|\.mypy_cache|\.pytest_cache|\.venv)/'
             fi
 
+            # Ensure virtualenv bin directory takes precedence
+            export PATH="$(pwd)/.venv/bin:$PATH"
+
             # Set PYTHONPATH
             export PYTHONPATH=$PYTHONPATH:$(pwd)
 

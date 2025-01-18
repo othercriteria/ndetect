@@ -727,3 +727,67 @@ def test_display_files_error_handling(
         or "errno 2" in msg.lower()  # Common "file not found" error code
         for msg in error_messages
     ), f"No file not found error in logs: {error_messages}"
+
+
+def test_dry_run_delete_operation(tmp_path: Path) -> None:
+    """Test that dry run mode prevents actual file deletion."""
+    # Create test files
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    # Mock user input to select files for deletion
+    with (
+        patch.object(Prompt, "ask", return_value="1,2"),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files") as mock_delete,
+    ):
+        ui.handle_delete([file1, file2])
+
+        # Verify delete_files was not called
+        mock_delete.assert_not_called()
+
+        # Verify files still exist
+        assert file1.exists()
+        assert file2.exists()
+
+
+def test_dry_run_move_operation(tmp_path: Path) -> None:
+    """Test that dry run mode prevents actual file moving."""
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    # Mock user input
+    with (
+        patch.object(Prompt, "ask", return_value="1,2"),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.execute_moves") as mock_execute,
+    ):
+        ui.handle_move([file1, file2])
+
+        # Verify execute_moves was not called
+        mock_execute.assert_not_called()
+
+        # Verify files haven't moved
+        assert file1.exists()
+        assert file2.exists()
+        assert not (tmp_path / "duplicates").exists()
