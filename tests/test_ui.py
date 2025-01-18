@@ -791,3 +791,89 @@ def test_dry_run_move_operation(tmp_path: Path) -> None:
         assert file1.exists()
         assert file2.exists()
         assert not (tmp_path / "duplicates").exists()
+
+
+def test_dry_run_continues_execution(tmp_path: Path) -> None:
+    """Test that dry run mode continues execution after delete operation."""
+    # Create test files
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    # Track number of operations
+    operation_count = 0
+
+    def count_operation(*args: Any, **kwargs: Any) -> bool:
+        nonlocal operation_count
+        operation_count += 1
+        return True
+
+    # Mock user input to perform multiple operations
+    with (
+        patch.object(Prompt, "ask", return_value="1,2"),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files") as mock_delete,
+    ):
+        # First operation
+        result1 = ui.handle_delete([file1, file2])
+        # Should be able to perform another operation
+        result2 = ui.handle_delete([file1, file2])
+
+        # Verify both operations were successful
+        assert result1 is True, "First dry run operation should succeed"
+        assert result2 is True, "Second dry run operation should succeed"
+
+        # Verify no actual deletions occurred
+        mock_delete.assert_not_called()
+        assert file1.exists(), "file1 should still exist"
+        assert file2.exists(), "file2 should still exist"
+
+
+def test_dry_run_interactive_loop(tmp_path: Path) -> None:
+    """Test that dry run mode continues interactive loop after delete operation."""
+    # Create test files
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    # Mock user inputs to simulate interactive loop:
+    # First return 'd' for delete, then 'q' for quit
+    action_responses = iter(["d", "q"])
+
+    def mock_action(*args: Any, **kwargs: Any) -> str:
+        return next(action_responses)
+
+    with (
+        patch.object(Prompt, "ask", side_effect=mock_action),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files") as mock_delete,
+    ):
+        # Create a similar group to process
+        group = SimilarGroup(id=1, files=[file1, file2], similarity=0.9)
+        group.keeper = file1  # Set keeper file
+
+        # Run the interactive loop
+        ui.handle_delete([file1, file2])
+
+        # Verify no actual deletions occurred
+        mock_delete.assert_not_called()
+        assert file1.exists()
+        assert file2.exists()

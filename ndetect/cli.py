@@ -306,9 +306,8 @@ def process_group(
             case Action.DELETE:
                 files = ui.select_files(group.files, "Select files to delete")
                 if files:
-                    ui.handle_delete(files)
-                    graph.remove_files(files)
-                return action
+                    if ui.handle_delete(files):
+                        graph.remove_files(files)
             case Action.PREVIEW:
                 ui.show_preview(group.files)
             case Action.SIMILARITIES:
