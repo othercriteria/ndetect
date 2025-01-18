@@ -103,20 +103,24 @@ class InteractiveUI:
             )
 
     def prompt_for_action(self) -> Action:
-        """Prompt for user action."""
-        action_map: Dict[str, Action] = {
-            "k": Action.KEEP,
+        """Prompt user for action on current group."""
+        action_map = {
             "d": Action.DELETE,
             "m": Action.MOVE,
+            "k": Action.KEEP,
             "p": Action.PREVIEW,
             "s": Action.SIMILARITIES,
-            "h": Action.HELP,
             "q": Action.QUIT,
+            "h": Action.HELP,
+            "": Action.KEEP,  # Default action
         }
 
         choice = Prompt.ask(
-            "\nChoose action", choices=list(action_map.keys()), default="k"
+            "\nWhat would you like to do with this group?",
+            choices=list(action_map.keys()),
+            default="",
         )
+
         return action_map[choice]
 
     def select_files(
@@ -346,6 +350,60 @@ class InteractiveUI:
         )
         self.console.print(panel)
 
+    def _select_keeper(self, group: SimilarGroup) -> None:
+        """Select a keeper file for the group, with optional user override."""
+        if group.keeper:
+            return
+
+        # Get default keeper based on retention config
+        group.keeper = select_keeper(group.files, self.retention_config)
+        self.console.print(f"\nDefault keeper selected: {group.keeper}")
+
+        if not Confirm.ask("\nDo you want to select a different keeper?"):
+            return
+
+        self._display_keeper_selection_table(group.files)
+        self._handle_keeper_selection(group)
+
+    def _display_keeper_selection_table(self, files: List[Path]) -> None:
+        """Display a numbered table of files for keeper selection."""
+        table = Table(show_header=True)
+        table.add_column("#")
+        table.add_column("File")
+        for idx, file in enumerate(files, 1):
+            table.add_row(str(idx), str(file))
+        self.console.print(table)
+
+    def _handle_keeper_selection(self, group: SimilarGroup) -> None:
+        """Handle user input for keeper selection."""
+        keeper_input = Prompt.ask(
+            "\nSelect keeper file number",
+            choices=[str(i) for i in range(1, len(group.files) + 1)],
+        )
+
+        try:
+            keeper_idx = int(keeper_input) - 1
+            if 0 <= keeper_idx < len(group.files):
+                group.keeper = group.files[keeper_idx]
+                self.console.print(f"\nNew keeper selected: {group.keeper}")
+            else:
+                self.show_error("Invalid keeper selection, using default")
+        except ValueError:
+            self.show_error("Invalid keeper selection, using default")
+
+    def _get_files_to_process(self, group: SimilarGroup) -> List[Path]:
+        """Get list of files to process, excluding the keeper."""
+        files = [f for f in group.files if f != group.keeper]
+        if not files:
+            self.console.print("[yellow]No files selected for operation[/yellow]")
+        return files
+
+    def _handle_dry_run(self, operation: str, files: List[Path]) -> None:
+        """Handle dry run mode for file operations."""
+        self.console.print(f"[yellow]Dry run: Would {operation} these files:[/yellow]")
+        for file in files:
+            self.console.print(f"  {file}")
+
     def _handle_file_operation(
         self,
         group: SimilarGroup,
@@ -355,31 +413,27 @@ class InteractiveUI:
     ) -> bool:
         """Handle file operations with dry run support."""
         try:
-            # Get files to operate on (excluding keeper)
-            files_to_process = [f for f in group.files if f != group.keeper]
+            # Select keeper and get files to process
+            self._select_keeper(group)
+            files_to_process = self._get_files_to_process(group)
             if not files_to_process:
-                self.console.print("[yellow]No files selected for operation[/yellow]")
                 return False
 
-            # Show confirmation message
+            # Get confirmation message and prompt user
             msg = (
                 confirm_message
                 if isinstance(confirm_message, str)
                 else confirm_message(files_to_process)
             )
-            if not Confirm.ask(msg):
+            if not Confirm.ask(f"\n{msg}"):
                 return False
 
-            # In dry run mode, just show what would happen
+            # Handle dry run mode
             if self.move_config and self.move_config.dry_run:
-                self.console.print(
-                    f"[yellow]Dry run: Would {operation} these files:[/yellow]"
-                )
-                for file in files_to_process:
-                    self.console.print(f"  {file}")
+                self._handle_dry_run(operation, files_to_process)
                 return True
 
-            # Actually perform the operation
+            # Execute the operation
             operation_func(files_to_process)
             return True
 
@@ -390,8 +444,6 @@ class InteractiveUI:
     def handle_delete(self, files: List[Path]) -> bool:
         """Handle deletion of selected files."""
         group = SimilarGroup(id=1, files=files, similarity=1.0)
-        # Select keeper before operation
-        group.keeper = select_keeper(files, self.retention_config)
         return self._handle_file_operation(
             group=group,
             operation="delete",
@@ -406,8 +458,6 @@ class InteractiveUI:
             return False
 
         group = SimilarGroup(id=1, files=files, similarity=1.0)
-        # Select keeper before operation
-        group.keeper = select_keeper(files, self.retention_config)
         return self._handle_file_operation(
             group=group,
             operation="move",

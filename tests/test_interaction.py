@@ -3,6 +3,7 @@
 import os
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch
 
 from rich.console import Console
@@ -18,9 +19,8 @@ def test_handle_delete_with_retention_config(tmp_path: Path) -> None:
     file1 = tmp_path / "small.txt"
     file2 = tmp_path / "large.txt"
     file1.write_text("small")
-    file2.write_text("large content")
+    file2.write_text("large content" * 100)  # Make sure it's larger
 
-    # Configure UI with retention config set to keep largest file
     console = Console(force_terminal=True)
     retention_config = RetentionConfig(strategy="largest")
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
@@ -28,19 +28,27 @@ def test_handle_delete_with_retention_config(tmp_path: Path) -> None:
         console=console, move_config=move_config, retention_config=retention_config
     )
 
-    # Mock both Prompt.ask and Confirm.ask
+    # Mock responses for different prompts
+    prompt_responses = {
+        "Do you want to select a different keeper?": False,  # Don't override keeper
+        "Are you sure you want to delete these files?": True,  # Confirm deletion
+    }
+
+    def mock_confirm(*args: Any, **kwargs: Any) -> bool:
+        msg = str(args[0] if args else kwargs.get("prompt", ""))
+        return prompt_responses.get(msg, True)
+
     with (
-        patch.object(Prompt, "ask", return_value="1"),
-        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.Confirm.ask", side_effect=mock_confirm),
         patch("ndetect.ui.delete_files") as mock_delete,
+        patch.object(Prompt, "ask", return_value=""),  # Empty response for any prompts
     ):
         result = ui.handle_delete([file1, file2])
-
         assert result is True
         mock_delete.assert_called_once()
         files_to_delete = mock_delete.call_args[0][0]
         assert len(files_to_delete) == 1
-        assert files_to_delete[0] == file1
+        assert files_to_delete[0] == file1  # Should delete smaller file
 
 
 def test_handle_delete_retention_empty_selection(tmp_path: Path) -> None:
@@ -86,18 +94,23 @@ def test_handle_delete_retention_priority_paths(tmp_path: Path) -> None:
         console=console, move_config=move_config, retention_config=retention_config
     )
 
+    def mock_confirm(*args: Any, **kwargs: Any) -> bool:
+        msg = str(args[0] if args else kwargs.get("prompt", ""))
+        if "Do you want to select a different keeper?" in msg:
+            return False
+        return True
+
     with (
-        patch.object(Prompt, "ask", return_value="2"),  # Select the non-priority file
-        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.Confirm.ask", side_effect=mock_confirm),
         patch("ndetect.ui.delete_files") as mock_delete,
+        patch.object(Prompt, "ask", return_value=""),  # Empty response for any prompts
     ):
         result = ui.handle_delete([priority_file, other_file])
-
         assert result is True
         mock_delete.assert_called_once()
         files_to_delete = mock_delete.call_args[0][0]
         assert len(files_to_delete) == 1
-        assert files_to_delete[0] == other_file
+        assert files_to_delete[0] == other_file  # Should delete non-priority file
 
 
 def test_handle_delete_invalid_selection(tmp_path: Path) -> None:

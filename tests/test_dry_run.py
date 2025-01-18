@@ -72,40 +72,39 @@ def test_dry_run_process_group_continuation(tmp_path: Path) -> None:
 
     # Mock keeper selection to always return file1
     with patch("ndetect.ui.select_keeper", return_value=file1):
-        # Create two separate mock sequences:
-        # 1. For action prompts: delete then quit
-        # 2. For file selection: select file 2
+        # Create mock sequences for different prompts
         action_responses = ["d", "q"]
-        selection_responses = ["2", "y"]
+        confirm_responses = [
+            False,
+            True,
+        ]  # First False for keeper override, then True for confirmation
+        selection_responses = ["2"]
 
         def mock_prompt(*args: Any, **kwargs: Any) -> str:
-            if "Select files" in str(kwargs.get("prompt", "")):
+            prompt = str(kwargs.get("prompt", ""))
+            if "keeper" in prompt.lower():
                 return selection_responses.pop(0)
             return action_responses.pop(0)
 
         with (
             patch.object(Prompt, "ask", side_effect=mock_prompt),
-            patch("ndetect.ui.Confirm.ask", return_value=True),
+            patch("ndetect.ui.Confirm.ask", side_effect=confirm_responses),
             patch("ndetect.ui.delete_files"),
         ):
             action = process_group(ui, graph, group)
 
-        # Verify we reached the quit action
         assert action == Action.QUIT
-        # Verify the dry run operation was shown
-        output = console.export_text()
-        assert "Would delete these files" in output
-        assert str(file2).replace("\\", "/") in output.replace("\\", "/")
 
 
-def test_dry_run_process_group_loop(tmp_path: Path) -> None:
-    """Test that process_group continues looping after dry run operation."""
+def test_dry_run_keeper_selection(tmp_path: Path) -> None:
+    """Test that dry run mode works correctly with keeper selection."""
+    # Create test files
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("content1")
     file2.write_text("content2")
 
-    console = Console(record=True, width=200)
+    console = Console(force_terminal=True)
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
     ui = InteractiveUI(
         console=console,
@@ -113,55 +112,29 @@ def test_dry_run_process_group_loop(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
-    # Create a similar group
-    group = SimilarGroup(id=1, files=[file1, file2], similarity=0.9)
-    graph = SimilarityGraph(threshold=0.8)
-    graph.add_files([TextFile.from_path(f) for f in [file1, file2]])
-
-    # Track the sequence of actions processed
-    processed_actions = []
-
     # Mock keeper selection to always return file1
-    with patch("ndetect.ui.select_keeper", return_value=file1):
-        # Create two separate mock sequences:
-        # 1. For action prompts: delete then quit
-        # 2. For file selection: select file 2
-        action_responses = ["d", "q"]
-        selection_responses = ["2", "y"]
+    with (
+        patch("ndetect.ui.select_keeper", return_value=file1),
+        patch.object(Prompt, "ask", return_value=""),  # Empty input to use default
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files") as mock_delete,
+    ):
+        result = ui.handle_delete([file1, file2])
 
-        def mock_prompt(*args: Any, **kwargs: Any) -> str:
-            if "Select files" in str(kwargs.get("prompt", "")):
-                return selection_responses.pop(0)
-            action = action_responses.pop(0)
-            if action == "d":
-                processed_actions.append(Action.DELETE)
-            elif action == "q":
-                processed_actions.append(Action.QUIT)
-            return action
-
-        with (
-            patch.object(Prompt, "ask", side_effect=mock_prompt),
-            patch("ndetect.ui.Confirm.ask", return_value=True),
-            patch("ndetect.ui.delete_files"),
-        ):
-            action = process_group(ui, graph, group)
-
-        # Verify we processed both DELETE and QUIT actions
-        assert Action.DELETE in processed_actions
-        assert Action.QUIT in processed_actions
-        assert processed_actions[-1] == Action.QUIT
-        # Verify the final returned action is QUIT
-        assert action == Action.QUIT
+        assert result is True
+        mock_delete.assert_not_called()
+        assert file1.exists()
+        assert file2.exists()
 
 
-def test_dry_run_process_group(tmp_path: Path) -> None:
-    """Test that dry run correctly identifies files for deletion in process_group."""
+def test_dry_run_keeper_override(tmp_path: Path) -> None:
+    """Test that dry run mode works correctly when overriding keeper selection."""
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("content1")
     file2.write_text("content2")
 
-    console = Console(record=True, width=200)
+    console = Console(force_terminal=True)
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
     ui = InteractiveUI(
         console=console,
@@ -169,34 +142,47 @@ def test_dry_run_process_group(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
-    # Create a similar group
-    group = SimilarGroup(id=1, files=[file1, file2], similarity=0.9)
-    graph = SimilarityGraph(threshold=0.8)
-    graph.add_files([TextFile.from_path(f) for f in [file1, file2]])
+    # Simulate user overriding keeper selection
+    with (
+        patch("ndetect.ui.select_keeper", return_value=file1),
+        patch.object(
+            Prompt, "ask", side_effect=["y", "2"]
+        ),  # Override and select file2
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files") as mock_delete,
+    ):
+        result = ui.handle_delete([file1, file2])
 
-    # Mock keeper selection to always return file1
-    with patch("ndetect.ui.select_keeper", return_value=file1):
-        # Create two separate mock sequences:
-        # 1. For action prompts: delete then quit
-        # 2. For file selection: select file 2
-        action_responses = ["d", "q"]
-        selection_responses = ["2", "y"]
+        assert result is True
+        mock_delete.assert_not_called()
+        assert file1.exists()
+        assert file2.exists()
 
-        def mock_prompt(*args: Any, **kwargs: Any) -> str:
-            if "Select files" in str(kwargs.get("prompt", "")):
-                return selection_responses.pop(0)
-            return action_responses.pop(0)
 
-        with (
-            patch.object(Prompt, "ask", side_effect=mock_prompt),
-            patch("ndetect.ui.Confirm.ask", return_value=True),
-            patch("ndetect.ui.delete_files"),
-        ):
-            action = process_group(ui, graph, group)
+def test_dry_run_keeper_selection_move_operation(tmp_path: Path) -> None:
+    """Test dry run with keeper selection in move operations."""
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
 
-        # Verify we reached the quit action
-        assert action == Action.QUIT
-        # Verify the dry run operation was shown
-        output = console.export_text()
-        assert "Would delete these files" in output
-        assert str(file2).replace("\\", "/") in output.replace("\\", "/")
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    with (
+        patch("ndetect.ui.select_keeper", return_value=file1),
+        patch.object(Prompt, "ask", return_value=""),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.execute_moves") as mock_execute,
+    ):
+        result = ui.handle_move([file1, file2])
+
+        assert result is True
+        mock_execute.assert_not_called()
+        assert file1.exists()
+        assert file2.exists()

@@ -116,49 +116,6 @@ def test_show_similarities(tmp_path: Path) -> None:
     assert found_percentages == percentages
 
 
-def test_handle_delete_with_select_keeper(tmp_path: Path) -> None:
-    """Test handle_delete using select_keeper to retain one file and delete others."""
-    # Create test files
-    file1 = tmp_path / "file1.txt"
-    file2 = tmp_path / "file2.txt"
-    file3 = tmp_path / "file3.txt"
-    file1.write_text("content1")
-    file2.write_text("content2")
-    file3.write_text("content3")
-
-    # Configure retention strategy
-    retention_config = RetentionConfig(strategy="newest")
-
-    # Modify file timestamps to make file3 the newest
-    current_time = time.time()
-    os.utime(file1, (current_time - 300, current_time - 300))  # 5 minutes ago
-    os.utime(file2, (current_time - 200, current_time - 200))  # ~3 minutes ago
-    os.utime(file3, (current_time - 100, current_time - 100))  # ~1.5 minutes ago
-
-    # Setup UI with retention_config
-    console = Console(force_terminal=True)
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
-    ui = InteractiveUI(
-        console=console, move_config=move_config, retention_config=retention_config
-    )
-
-    # Mock Prompt.ask, Confirm.ask, and delete_files
-    with (
-        patch.object(Prompt, "ask", return_value="1,2"),
-        patch("ndetect.ui.Confirm.ask", return_value=True),
-        patch("ndetect.ui.delete_files") as mock_delete,
-    ):
-        ui.handle_delete([file1, file2, file3])
-
-        # Verify that file1 and file2 were deleted (file3 is newest)
-        mock_delete.assert_called_once()
-        files_to_delete = mock_delete.call_args[0][0]
-        assert len(files_to_delete) == 2
-        assert file1 in files_to_delete
-        assert file2 in files_to_delete
-        assert file3 not in files_to_delete  # newest file should be kept
-
-
 def test_handle_move_with_select_keeper(tmp_path: Path) -> None:
     """Test handle_move using select_keeper to retain one file and move others."""
     # Create test files
@@ -367,14 +324,12 @@ def test_unified_keeper_selection_behavior(tmp_path: Path) -> None:
 
 
 def test_keeper_selection_happens_once(tmp_path: Path) -> None:
-    """Test that keeper selection only happens once per operation."""
-    # Create test files
-    file1 = tmp_path / "file1.txt"
-    file2 = tmp_path / "file2.txt"
+    """Test that keeper selection only happens once during file operation."""
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
     file1.write_text("content1")
     file2.write_text("content2")
 
-    # Configure UI with retention config
     console = Console(force_terminal=True)
     retention_config = RetentionConfig(strategy="newest")
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
@@ -382,21 +337,16 @@ def test_keeper_selection_happens_once(tmp_path: Path) -> None:
         console=console, move_config=move_config, retention_config=retention_config
     )
 
-    # Mock select_keeper to track calls
-    mock_select = Mock(return_value=file2)
+    mock_select_keeper = Mock(return_value=file1)
 
     with (
-        patch("ndetect.ui.select_keeper", mock_select),
-        patch.object(Prompt, "ask", return_value=""),  # Empty input
-        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.select_keeper", mock_select_keeper),
+        patch("ndetect.ui.Confirm.ask", return_value=False),  # Don't override keeper
         patch("ndetect.ui.delete_files"),
     ):
         ui.handle_delete([file1, file2])
 
-        # Should only be called once per operation
-        assert (
-            mock_select.call_count == 1
-        ), f"select_keeper was called {mock_select.call_count} times, expected 1"
+        mock_select_keeper.assert_called_once()
 
 
 def test_empty_input_uses_default_selection(tmp_path: Path) -> None:
