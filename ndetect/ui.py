@@ -22,7 +22,7 @@ from ndetect.operations import (
     prepare_moves,
     select_keeper,
 )
-from ndetect.types import Action
+from ndetect.types import Action, SimilarGroup
 from ndetect.utils import format_preview_text
 
 logger = get_logger()
@@ -35,15 +35,15 @@ class InteractiveUI:
         self,
         console: Console,
         move_config: MoveConfig,
+        retention_config: RetentionConfig,
         preview_config: Optional[PreviewConfig] = None,
-        retention_config: Optional[RetentionConfig] = None,
         logger: Optional[StructuredLogger] = None,
     ) -> None:
         """Initialize the UI."""
         self.console = console
         self.move_config = move_config
+        self.retention_config = retention_config
         self.preview_config = preview_config or PreviewConfig()
-        self.retention_config = retention_config or RetentionConfig(strategy="newest")
         self.logger = logger or get_logger()
         self.pending_moves: List[MoveOperation] = []
 
@@ -59,24 +59,22 @@ class InteractiveUI:
         ) as progress:
             progress.add_task("Scanning files...", total=None)
 
-    def display_group(
-        self, group_id: int, files: List[Path], similarity: float
-    ) -> None:
+    def display_group(self, group: SimilarGroup) -> None:
         """Display a group of similar files."""
         self.logger.info_with_fields(
             "Displaying file group",
             operation="display",
-            group_id=group_id,
-            similarity=similarity,
-            file_count=len(files),
-            files=[str(f) for f in files],
+            group_id=group.id,
+            similarity=group.similarity,
+            file_count=len(group.files),
+            files=[str(f) for f in group.files],
         )
 
         # Show similarity based on group size
-        if len(files) == 2:
-            self.console.print(f"~{similarity:.2%} similar")
+        if len(group.files) == 2:
+            self.console.print(f"~{group.similarity:.2%} similar")
         else:
-            self.console.print(f"~{similarity:.2%} avg. similarity")
+            self.console.print(f"~{group.similarity:.2%} avg. similarity")
 
         # Create a table for the files
         table = Table(show_header=True, header_style="bold magenta")
@@ -86,7 +84,7 @@ class InteractiveUI:
         table.add_column("Modified", justify="right", style="yellow")
 
         # Add rows for each file
-        for idx, file in enumerate(files, 1):
+        for idx, file in enumerate(group.files, 1):
             stats = file.stat()
             table.add_row(
                 str(idx),
@@ -97,15 +95,11 @@ class InteractiveUI:
 
         self.console.print(table)
 
-        # Automatically select keeper if retention_config is available
-        if self.retention_config:
-            keeper = select_keeper(files, self.retention_config)
-            self.console.print(f"\n[green]Default keeper selected: {keeper}[/green]")
-            self.logger.info_with_fields(
-                "Keeper automatically selected for group",
-                operation="select_keeper",
-                keeper=str(keeper),
-                group_id=group_id,
+        # Select keeper if not already set
+        if not group.keeper:
+            group.keeper = select_keeper(group.files, self.retention_config)
+            self.console.print(
+                f"\n[green]Default keeper selected: {group.keeper}[/green]"
             )
 
     def prompt_for_action(self) -> Action:
@@ -354,41 +348,30 @@ class InteractiveUI:
 
     def _handle_file_operation(
         self,
-        files: List[Path],
+        group: SimilarGroup,
         operation: str,
         operation_func: Callable[[List[Path]], None],
         confirm_message: Union[str, Callable[[List[Path]], str]],
     ) -> bool:
         """Handle file operations with retention-based selection."""
-        if not files:
+        if not group.files:
             return False
 
-        files_to_process = files
-        try:
-            keeper = select_keeper(files, self.retention_config)
-            # Default selection is all files except keeper
-            files_to_process = [f for f in files if f != keeper]
-            self.console.print(f"\n[green]Selected keeper: {keeper}[/green]")
-        except Exception as e:
-            self.logger.error_with_fields(
-                f"Failed to select keeper: {e}",
-                operation="select_keeper",
-                error=str(e),
-            )
-            return False
+        files_to_process = [f for f in group.files if f != group.keeper]
+        self.console.print(f"\n[green]Selected keeper: {group.keeper}[/green]")
 
         # Allow user to override the selection
         try:
             selected_indices = self._prompt_for_indices(
-                files,
+                group.files,
                 f"Enter file numbers to {operation} (comma-separated, or Enter "
                 "to accept default)",
-                keeper=keeper,
+                keeper=group.keeper,
             )
             if selected_indices:  # Only override if user provided input
-                files_to_process = [files[i - 1] for i in selected_indices]
-                if keeper in files_to_process:
-                    files_to_process.remove(keeper)
+                files_to_process = [group.files[i - 1] for i in selected_indices]
+                if group.keeper in files_to_process:
+                    files_to_process.remove(group.keeper)
         except ValueError as e:
             self.console.print(f"[red]Invalid selection: {e}[/red]")
             return False
@@ -418,42 +401,38 @@ class InteractiveUI:
             return False
 
     def handle_delete(self, files: List[Path]) -> bool:
-        """Handle deletion of files."""
-        if not files:
-            return False
-
-        # Display files with numbers
-        self.display_files(files)
-
+        """Handle deletion of selected files."""
+        group = SimilarGroup(id=1, files=files, similarity=1.0)
+        # Select keeper before operation
+        group.keeper = select_keeper(files, self.retention_config)
         return self._handle_file_operation(
-            files,
-            "delete",
-            delete_files,
-            lambda files_to_delete: (
-                f"Delete {len(files_to_delete)} files? "
-                "[red]This action cannot be undone[/red]"
-            ),
+            group=group,
+            operation="delete",
+            operation_func=delete_files,
+            confirm_message="Are you sure you want to delete these files?",
         )
 
     def handle_move(self, files: List[Path]) -> bool:
         """Handle moving selected files to holding directory."""
         if not self.move_config:
-            self.console.print("[red]Move configuration not provided[/red]")
+            self.console.print("[red]Move operation not configured[/red]")
             return False
 
-        def prepare_moves_for_files(files_to_move: List[Path]) -> List[MoveOperation]:
-            return prepare_moves(
-                files=files_to_move,
-                holding_dir=self.move_config.holding_dir,
-                preserve_structure=self.move_config.preserve_structure,
-            )
-
+        group = SimilarGroup(id=1, files=files, similarity=1.0)
+        # Select keeper before operation
+        group.keeper = select_keeper(files, self.retention_config)
         return self._handle_file_operation(
-            files,
-            "move",
-            lambda files_to_move: execute_moves(prepare_moves_for_files(files_to_move)),
-            lambda files_to_move: (
-                f"Move {len(files_to_move)} files to {self.move_config.holding_dir}?"
+            group=group,
+            operation="move",
+            operation_func=lambda files: execute_moves(
+                prepare_moves(
+                    files,
+                    self.move_config.holding_dir,
+                    self.move_config.preserve_structure,
+                )
+            ),
+            confirm_message=lambda files: (
+                f"Move {len(files)} files to {self.move_config.holding_dir}?"
             ),
         )
 

@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, NewType, Tuple, TypeAlias
+from typing import Any, Dict, Iterator, List, NewType, Optional, Tuple, TypeAlias
 
 import networkx as nx
 
@@ -27,6 +27,7 @@ class SimilarGroup:
     id: int
     files: List[Path]
     similarity: float
+    keeper: Optional[Path] = None  # Add keeper field
 
 
 class Action(Enum):

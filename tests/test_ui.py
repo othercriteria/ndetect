@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from datetime import datetime
@@ -12,9 +13,10 @@ from rich.prompt import Prompt
 from rich.table import Table
 from rich.text import Text
 
+from ndetect.logging import get_logger
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
 from ndetect.operations import MoveOperation, select_keeper
-from ndetect.types import Action
+from ndetect.types import Action, SimilarGroup
 from ndetect.ui import InteractiveUI
 
 
@@ -30,6 +32,7 @@ def test_show_preview_respects_limits(tmp_path: Path) -> None:
     ui = InteractiveUI(
         console=console,
         move_config=MoveConfig(holding_dir=Path("holding")),
+        retention_config=RetentionConfig(strategy="newest"),
         preview_config=preview_config,
     )
 
@@ -51,6 +54,7 @@ def test_show_similarities(tmp_path: Path) -> None:
     ui = InteractiveUI(
         console=console,
         move_config=MoveConfig(holding_dir=Path("holding")),
+        retention_config=RetentionConfig(strategy="newest"),
     )
 
     # Create test files with shorter paths
@@ -249,7 +253,11 @@ def test_show_help(capsys: pytest.CaptureFixture[str]) -> None:
     # Setup UI
     console = Console(force_terminal=True)
     move_config = MoveConfig(holding_dir=Path("holding"))
-    ui = InteractiveUI(console=console, move_config=move_config)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
 
     # Mock logger to avoid actual logging
     with patch.object(ui, "logger") as mock_logger:
@@ -279,7 +287,11 @@ def test_prompt_for_action_help(monkeypatch: pytest.MonkeyPatch) -> None:
     # Setup UI
     console = Console(force_terminal=True)
     move_config = MoveConfig(holding_dir=Path("holding"))
-    ui = InteractiveUI(console=console, move_config=move_config)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
 
     # Mock Prompt.ask to return 'h'
     monkeypatch.setattr("rich.prompt.Prompt.ask", lambda *args, **kwargs: "h")
@@ -571,3 +583,147 @@ def test_ui_logging_and_selection_flow(tmp_path: Path, caplog: Any) -> None:
             if record.message not in message_sources:
                 message_sources[record.message] = []
             message_sources[record.message].append(f"{record.pathname}:{record.lineno}")
+
+
+def test_preview_display(tmp_path: Path) -> None:
+    """Test file preview display with line and character limits."""
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("test content\nline 2\nline 3\nline 4")
+    file2.write_text("different content")
+
+    # Use no_color=True and width=100 for consistent output
+    console = Console(force_terminal=True, no_color=True, width=100)
+    ui = InteractiveUI(
+        console=console,
+        move_config=MoveConfig(holding_dir=tmp_path / "duplicates"),
+        retention_config=RetentionConfig(strategy="newest"),
+        preview_config=PreviewConfig(max_chars=10, max_lines=2),
+    )
+
+    with console.capture() as capture:
+        ui.show_preview([file1, file2])
+
+    output = capture.get()
+    # Just check for the truncated content
+    assert "test co" in output  # First 7 chars of "test content"
+    assert "differ" in output  # Start of "different content"
+
+
+def test_display_group_table_format(tmp_path: Path) -> None:
+    """Test that group display shows correct table format with all columns."""
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("content")
+    file2.write_text("content")
+
+    console = Console(force_terminal=True, no_color=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=MoveConfig(holding_dir=tmp_path / "duplicates"),
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    group = SimilarGroup(id=1, files=[file1, file2], similarity=0.85)
+
+    with console.capture() as capture:
+        ui.display_group(group)
+
+    output = Text.from_ansi(capture.get()).plain
+    assert "85.00% similar" in output
+    assert "#" in output
+    assert "File" in output
+    assert "Size" in output
+    assert "Modified" in output
+
+
+def test_display_files_with_errors(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test display_files handles permission and other OS errors."""
+    # Set up logging capture at the root logger level
+    caplog.set_level(logging.ERROR)  # Capture all loggers
+
+    file1 = tmp_path / "test1.txt"
+    file1.write_text("content")
+
+    file2 = tmp_path / "noperm.txt"
+    file2.write_text("content")
+    os.chmod(file2, 0o000)
+
+    console = Console(force_terminal=True, no_color=True, width=100)
+    ui = InteractiveUI(
+        console=console,
+        move_config=MoveConfig(holding_dir=tmp_path / "duplicates"),
+        retention_config=RetentionConfig(strategy="newest"),
+        logger=get_logger(),  # Add logger explicitly
+    )
+
+    # Clear any existing records
+    caplog.clear()
+
+    with console.capture() as capture:
+        ui.display_files([file1, file2])
+
+    output = capture.get()
+    assert "test1.txt" in output
+    assert "noperm.txt" in output
+
+    # Print captured logs for debugging
+    print("\nCaptured logs:")
+    for record in caplog.records:
+        print(f"Level: {record.levelname}, Message: {record.message}")
+
+    # Check for error messages in the console output
+    assert any(
+        msg in output.lower()
+        for msg in ["permission denied", "failed to get file stats", "error"]
+    ), f"No error message found in output: {output}"
+
+    # Cleanup
+    os.chmod(file2, 0o666)
+
+
+def test_display_files_error_handling(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test display_files handles stat errors gracefully."""
+    # Set up logging capture at the root logger level
+    caplog.set_level(logging.ERROR, logger="ndetect")
+
+    file1 = tmp_path / "test1.txt"
+    file1.write_text("content")
+    non_existent = tmp_path / "nonexistent.txt"
+
+    console = Console(force_terminal=True, no_color=True, width=100)
+    ui = InteractiveUI(
+        console=console,
+        move_config=MoveConfig(holding_dir=tmp_path / "duplicates"),
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    # Clear any existing records
+    caplog.clear()
+
+    with console.capture() as capture:
+        ui.display_files([file1, non_existent])
+
+    output = capture.get()
+    assert "test1.txt" in output
+    assert "nonexistent.t" in output  # Filename might be truncated
+
+    # Print captured logs for debugging
+    print("\nCaptured logs:")
+    for record in caplog.records:
+        print(f"Level: {record.levelname}, Message: {record.message}")
+
+    # Check for any error related to missing file
+    error_messages = [
+        record.message for record in caplog.records if record.levelno >= logging.ERROR
+    ]
+    assert any(
+        "no such file" in msg.lower()
+        or "failed to get file stats" in msg.lower()
+        or "errno 2" in msg.lower()  # Common "file not found" error code
+        for msg in error_messages
+    ), f"No file not found error in logs: {error_messages}"

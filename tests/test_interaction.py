@@ -108,8 +108,11 @@ def test_handle_delete_invalid_selection(tmp_path: Path) -> None:
     file2.write_text("content2")
 
     console = Console(force_terminal=True)
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
-    ui = InteractiveUI(console=console, move_config=move_config)
+    ui = InteractiveUI(
+        console=console,
+        move_config=MoveConfig(holding_dir=tmp_path / "duplicates"),
+        retention_config=RetentionConfig(strategy="newest"),
+    )
 
     # Test invalid numeric input
     with (

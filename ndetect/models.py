@@ -157,7 +157,7 @@ class CLIConfig:
     holding_dir: Path = field(default_factory=lambda: Path("duplicates"))
     log_file: Path = field(default_factory=lambda: Path("ndetect.log"))
     verbose: bool = False
-    min_printable_ratio: float = 0.7
+    min_printable_ratio: float = 0.8
     num_perm: int = 128
     shingle_size: int = 3
     follow_symlinks: bool = False
@@ -171,6 +171,7 @@ class CLIConfig:
     retention_strategy: str = "newest"
     priority_paths: List[str] = field(default_factory=list)
     priority_first: bool = False
+    preserve_structure: bool = True
 
     @classmethod
     def from_args(cls, args: Namespace) -> "CLIConfig":
@@ -199,6 +200,7 @@ class CLIConfig:
             retention_strategy=args.retention,
             priority_paths=args.priority_paths or [],
             priority_first=args.priority_first,
+            preserve_structure=args.preserve_structure,
         )
 
     def __post_init__(self) -> None:

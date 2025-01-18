@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from rich.console import Console
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress
 
 from ndetect import __version__
 from ndetect.exceptions import (
@@ -16,10 +16,16 @@ from ndetect.exceptions import (
 from ndetect.logging import StructuredLogger, setup_logging
 from ndetect.models import (
     CLIConfig,
+    MoveConfig,
     RetentionConfig,
     TextFile,
 )
-from ndetect.operations import MoveOperation, execute_moves, prepare_moves
+from ndetect.operations import (
+    MoveOperation,
+    execute_moves,
+    prepare_moves,
+    select_keeper,
+)
 from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
 from ndetect.types import Action, SimilarGroup
@@ -292,7 +298,7 @@ def process_group(
     ui: InteractiveUI, graph: SimilarityGraph, group: SimilarGroup
 ) -> Action:
     """Process a group of similar files."""
-    ui.display_group(group.id, group.files, group.similarity)
+    ui.display_group(group)
 
     while True:
         action = ui.prompt_for_action()
@@ -320,6 +326,7 @@ def process_group(
                 return action
 
 
+# ruff: noqa: C901
 def handle_interactive_mode(
     config: CLIConfig,
     console: Console,
@@ -327,15 +334,7 @@ def handle_interactive_mode(
     graph: SimilarityGraph,
     logger: StructuredLogger,
 ) -> int:
-    """Handle interactive mode with rich UI."""
-    ui = InteractiveUI(
-        console=console,
-        move_config=config.move_config,
-        preview_config=config.preview_config,
-        retention_config=config.retention_config,
-        logger=logger,
-    )
-
+    """Handle interactive mode."""
     logger.info_with_fields(
         "Starting interactive mode",
         operation="start",
@@ -343,16 +342,59 @@ def handle_interactive_mode(
         threshold=config.threshold,
     )
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        console=console,
-    ) as progress:
-        graph = build_similarity_graph(text_files, config.threshold, progress)
+    if not config.retention_strategy:
+        console.print("[red]Retention strategy is required[/red]")
+        return 1
 
-    return process_interactive_groups(ui, graph)
+    # Configure UI
+    move_config = MoveConfig(
+        holding_dir=config.holding_dir,
+        dry_run=config.dry_run,
+    )
+
+    retention_config = RetentionConfig(
+        strategy=config.retention_strategy,
+        priority_paths=config.priority_paths,
+        priority_first=config.priority_first,
+    )
+
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=retention_config,
+        logger=logger,
+    )
+
+    # Process groups
+    groups = graph.get_groups()
+    if not groups:
+        console.print("[yellow]No similar files found[/yellow]")
+        return 0
+
+    for group in groups:
+        ui.display_group(group)
+        action = ui.prompt_for_action()
+
+        match action:
+            case Action.KEEP:
+                graph.remove_group(group.files)
+            case Action.DELETE:
+                if ui.handle_delete(group.files):
+                    graph.remove_files(group.files)
+            case Action.MOVE:
+                if ui.handle_move(group.files):
+                    graph.remove_files(group.files)
+            case Action.PREVIEW:
+                ui.show_preview(group.files)
+            case Action.SIMILARITIES:
+                similarities = graph.get_group_similarities(group.files)
+                ui.show_similarities(group.files, similarities)
+            case Action.HELP:
+                ui.show_help()
+            case Action.QUIT:
+                return 0
+
+    return 0
 
 
 def handle_non_interactive_mode(
@@ -362,37 +404,46 @@ def handle_non_interactive_mode(
     graph: SimilarityGraph,
     logger: StructuredLogger,
 ) -> int:
-    """Handle non-interactive mode operations."""
-    similar_groups = list(graph.get_groups())
-
-    if not similar_groups:
-        logger.info_with_fields(
-            "No similar files found",
-            operation="complete",
-            status="no_groups",
-        )
-        return 0
-
-    moves = process_similar_groups(
-        console=console,
-        graph=graph,
-        base_dir=config.base_dir,
-        holding_dir=config.holding_dir,
-        retention_config=config.retention_config,
-        dry_run=config.dry_run,
-        logger=logger,
+    """Handle non-interactive mode."""
+    logger.info_with_fields(
+        "Starting non-interactive mode",
+        operation="start",
+        total_files=len(text_files),
     )
 
-    if not moves:
+    retention_config = RetentionConfig(
+        strategy=config.retention_strategy,
+        priority_paths=config.priority_paths,
+        priority_first=config.priority_first,
+    )
+
+    move_config = MoveConfig(
+        holding_dir=config.holding_dir,
+        preserve_structure=config.preserve_structure,
+    )
+
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=retention_config,
+    )
+
+    # Process groups
+    groups = graph.get_groups()
+    if not groups:
+        console.print("[yellow]No similar files found[/yellow]")
         return 0
 
-    if not config.dry_run:
-        execute_moves(moves)
-        logger.info_with_fields(
-            "Moves completed successfully",
-            operation="complete",
-            status="success",
-        )
+    for group in groups:
+        ui.display_group(group)
+        # In non-interactive mode, automatically select non-keeper files
+        group.keeper = select_keeper(group.files, retention_config)
+        files_to_move = [f for f in group.files if f != group.keeper]
+        if files_to_move:
+            moves = ui.create_moves(files_to_move, group_id=group.id)
+            if not config.dry_run:
+                execute_moves(moves)
+            graph.remove_files(files_to_move)
 
     return 0
 
@@ -414,12 +465,12 @@ def process_similar_groups(
         return []
 
     all_moves: List[MoveOperation] = []
-    for i, group in enumerate(groups, 1):
+    for group in groups:
         moves = prepare_moves(
             files=group.files,
-            holding_dir=holding_dir / f"group_{i}",
+            holding_dir=holding_dir / f"group_{group.id}",
             preserve_structure=True,
-            group_id=i,
+            group_id=group.id,
             base_dir=base_dir,
             retention_config=retention_config,
         )
@@ -434,7 +485,7 @@ def process_similar_groups(
                 dry_run=dry_run,
                 source=str(rel_src),
                 destination=str(rel_dst),
-                group_id=i,
+                group_id=group.id,
             )
 
             msg = f"  {rel_src} -> {rel_dst}"

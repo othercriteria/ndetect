@@ -1,5 +1,6 @@
 """Similarity graph implementation for near-duplicate detection."""
 
+import itertools
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -81,38 +82,35 @@ class SimilarityGraph:
             self.graph.add_edge(path1, path2, weight=sim)
 
     def get_groups(self) -> List[SimilarGroup]:
-        """Get all groups of similar files."""
-        groups: List[SimilarGroup] = []
+        """Get all groups of similar files, sorted by similarity."""
+        if not self.graph:
+            return []
 
         # Find connected components (groups of similar files)
-        components = list(nx.connected_components(self.graph))
-
-        for component in components:
-            if len(component) < 2:
+        groups = []
+        for i, component in enumerate(nx.connected_components(self.graph), 1):
+            files = sorted(component)  # Sort for consistent ordering
+            if len(files) < 2:
                 continue
 
             # Calculate average similarity for the group
             similarities = []
-            files = list(component)
-            for i, file1 in enumerate(files):
-                for file2 in files[i + 1 :]:
-                    if self.graph.has_edge(file1, file2):
-                        similarities.append(self.graph.edges[file1, file2]["weight"])
-
-            avg_similarity = (
-                sum(similarities) / len(similarities) if similarities else 0.0
-            )
+            for f1, f2 in itertools.combinations(files, 2):
+                if self.graph.has_edge(f1, f2):
+                    similarities.append(self.graph.edges[f1, f2]["weight"])
+            avg_similarity = sum(similarities) / len(similarities)
 
             groups.append(
                 SimilarGroup(
-                    id=self._next_group_id,
-                    files=list(component),
+                    id=i,
+                    files=files,
                     similarity=avg_similarity,
+                    keeper=None,  # Initialize with no keeper
                 )
             )
-            self._next_group_id += 1
 
-        return groups
+        # Sort groups by similarity (highest first)
+        return sorted(groups, key=lambda g: g.similarity, reverse=True)
 
     def remove_files(self, files: List[Path]) -> None:
         """Remove files from the graph."""
