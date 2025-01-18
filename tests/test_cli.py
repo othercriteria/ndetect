@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Generator
+from typing import Any, Generator, List
 from unittest.mock import Mock, patch
 
 import pytest
@@ -33,6 +33,15 @@ def cleanup_duplicates() -> Generator[None, None, None]:
             if dir.is_dir():
                 dir.rmdir()
         duplicates_dir.rmdir()
+
+
+def create_graph_from_files(
+    text_files: List[TextFile], threshold: float = 0.8
+) -> SimilarityGraph:
+    """Helper function to create a graph from text files."""
+    graph = SimilarityGraph(threshold=threshold)
+    graph.add_files(text_files)
+    return graph
 
 
 def test_parse_args_default_mode() -> None:
@@ -358,10 +367,13 @@ def test_non_interactive_mode_basic(tmp_path: Path) -> None:
         max_workers=config.max_workers,
     )
 
+    graph = create_graph_from_files(text_files, config.threshold)
+
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=get_logger(),
     )
     assert result == 0
@@ -398,10 +410,12 @@ def test_non_interactive_mode_with_retention(tmp_path: Path) -> None:
         max_workers=config.max_workers,
     )
 
+    graph = create_graph_from_files(text_files, config.threshold)
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=get_logger(),
     )
     assert result == 0
@@ -433,10 +447,12 @@ def test_non_interactive_mode_with_dry_run(tmp_path: Path) -> None:
         max_workers=config.max_workers,
     )
 
+    graph = create_graph_from_files(text_files, config.threshold)
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=get_logger(),
     )
     assert result == 0
@@ -464,10 +480,12 @@ def test_non_interactive_mode_empty_directory(tmp_path: Path) -> None:
         max_workers=config.max_workers,
     )
 
+    graph = create_graph_from_files(text_files, config.threshold)
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=get_logger(),
     )
     assert result == 0
@@ -507,6 +525,7 @@ def test_non_interactive_mode_with_error(tmp_path: Path) -> None:
     mock_move.destination = holding_dir / "test1.txt"
     mock_move.operation = "move"
 
+    graph = create_graph_from_files(text_files, config.threshold)
     with (
         patch(
             "ndetect.cli.execute_moves",
@@ -522,6 +541,7 @@ def test_non_interactive_mode_with_error(tmp_path: Path) -> None:
             config=config,
             console=console,
             text_files=text_files,
+            graph=graph,
             logger=get_logger(),
         )
 
@@ -562,10 +582,12 @@ def test_non_interactive_mode_with_logging(tmp_path: Path) -> None:
         max_workers=config.max_workers,
     )
 
+    graph = create_graph_from_files(text_files, config.threshold)
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=logger,
     )
     assert result == 0
@@ -597,10 +619,12 @@ def test_non_interactive_mode_no_duplicates(tmp_path: Path) -> None:
         max_workers=config.max_workers,
     )
 
+    graph = create_graph_from_files(text_files, config.threshold)
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=get_logger(),
     )
     assert result == 0
@@ -793,10 +817,12 @@ def test_non_interactive_mode_with_verbose(tmp_path: Path) -> None:
         max_workers=config.max_workers,
     )
 
+    graph = create_graph_from_files(text_files, config.threshold)
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=get_logger(),
     )
     assert result == 0

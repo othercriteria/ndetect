@@ -4,7 +4,7 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
@@ -198,6 +198,43 @@ def parse_args(argv: Optional[List[str]] = None) -> CLIConfig:
     )
 
 
+def setup_and_scan(
+    config: CLIConfig,
+    console: Console,
+    logger: StructuredLogger,
+) -> Tuple[List[TextFile], SimilarityGraph]:
+    """Set up environment and scan files."""
+    if not config.paths:
+        logger.info_with_fields(
+            "No paths provided",
+            operation="complete",
+            status="no_paths",
+        )
+        return [], SimilarityGraph(threshold=config.threshold)
+
+    text_files = scan_paths(
+        paths=config.paths,
+        min_printable_ratio=config.min_printable_ratio,
+        num_perm=config.num_perm,
+        shingle_size=config.shingle_size,
+        follow_symlinks=config.follow_symlinks,
+        max_workers=config.max_workers,
+    )
+
+    if not text_files:
+        logger.info_with_fields(
+            "No valid text files found",
+            operation="complete",
+            status="no_files",
+        )
+        return [], SimilarityGraph(threshold=config.threshold)
+
+    graph = SimilarityGraph(threshold=config.threshold)
+    graph.add_files(text_files)
+
+    return text_files, graph
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI."""
     try:
@@ -205,21 +242,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         logger = setup_logging(config.log_file, config.verbose)
         console = Console()
 
-        # Scan files first (common to both modes)
-        text_files = scan_paths(
-            paths=config.paths,
-            min_printable_ratio=config.min_printable_ratio,
-            num_perm=config.num_perm,
-            shingle_size=config.shingle_size,
-            follow_symlinks=config.follow_symlinks,
-            max_workers=config.max_workers,
-        )
+        text_files, graph = setup_and_scan(config, console, logger)
+
+        if not text_files:
+            return 0
 
         if config.mode == "interactive":
             return handle_interactive_mode(
                 config=config,
                 console=console,
                 text_files=text_files,
+                graph=graph,
                 logger=logger,
             )
         else:
@@ -227,6 +260,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 config=config,
                 console=console,
                 text_files=text_files,
+                graph=graph,
                 logger=logger,
             )
     except Exception as e:
@@ -285,6 +319,7 @@ def handle_interactive_mode(
     config: CLIConfig,
     console: Console,
     text_files: List[TextFile],
+    graph: SimilarityGraph,
     logger: StructuredLogger,
 ) -> int:
     """Handle interactive mode with rich UI."""
@@ -313,6 +348,48 @@ def handle_interactive_mode(
         graph = build_similarity_graph(text_files, config.threshold, progress)
 
     return process_interactive_groups(ui, graph)
+
+
+def handle_non_interactive_mode(
+    config: CLIConfig,
+    console: Console,
+    text_files: List[TextFile],
+    graph: SimilarityGraph,
+    logger: StructuredLogger,
+) -> int:
+    """Handle non-interactive mode operations."""
+    similar_groups = list(graph.get_groups())
+
+    if not similar_groups:
+        logger.info_with_fields(
+            "No similar files found",
+            operation="complete",
+            status="no_groups",
+        )
+        return 0
+
+    moves = process_similar_groups(
+        console=console,
+        graph=graph,
+        base_dir=config.base_dir,
+        holding_dir=config.holding_dir,
+        retention_config=config.retention_config,
+        dry_run=config.dry_run,
+        logger=logger,
+    )
+
+    if not moves:
+        return 0
+
+    if not config.dry_run:
+        execute_moves(moves)
+        logger.info_with_fields(
+            "Moves completed successfully",
+            operation="complete",
+            status="success",
+        )
+
+    return 0
 
 
 def process_similar_groups(
@@ -370,57 +447,6 @@ def process_similar_groups(
         total_moves=len(all_moves),
     )
     return all_moves
-
-
-def handle_non_interactive_mode(
-    config: CLIConfig,
-    console: Console,
-    text_files: List[TextFile],
-    logger: StructuredLogger,
-) -> int:
-    """Handle non-interactive mode operations."""
-    if not text_files:
-        logger.info_with_fields(
-            "No valid text files found",
-            operation="complete",
-            status="no_files",
-        )
-        return 0
-
-    graph = SimilarityGraph(threshold=config.threshold)
-    graph.add_files(text_files)
-    similar_groups = list(graph.get_groups())
-
-    if not similar_groups:
-        logger.info_with_fields(
-            "No similar files found",
-            operation="complete",
-            status="no_groups",
-        )
-        return 0
-
-    moves = process_similar_groups(
-        console=console,
-        graph=graph,
-        base_dir=config.base_dir,
-        holding_dir=config.holding_dir,
-        retention_config=config.retention_config,
-        dry_run=config.dry_run,
-        logger=logger,
-    )
-
-    if not moves:
-        return 0
-
-    if not config.dry_run:
-        execute_moves(moves)
-        logger.info_with_fields(
-            "Moves completed successfully",
-            operation="complete",
-            status="success",
-        )
-
-    return 0
 
 
 def handle_cleanup_phase(ui: InteractiveUI) -> int:

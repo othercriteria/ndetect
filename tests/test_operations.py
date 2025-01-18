@@ -13,6 +13,7 @@ from ndetect.exceptions import FileOperationError, PermissionError
 from ndetect.logging import get_logger
 from ndetect.models import CLIConfig, RetentionConfig
 from ndetect.operations import MoveOperation, delete_files, select_keeper
+from ndetect.similarity import SimilarityGraph
 from ndetect.text_detection import scan_paths
 
 
@@ -99,10 +100,15 @@ def test_non_interactive_mode_with_retention(
         max_workers=config.max_workers,
     )
 
+    # Create and populate the similarity graph
+    graph = SimilarityGraph(threshold=config.threshold)
+    graph.add_files(text_files)
+
     result = handle_non_interactive_mode(
         config=config,
         console=console,
         text_files=text_files,
+        graph=graph,
         logger=get_logger(),
     )
     assert result == 0
