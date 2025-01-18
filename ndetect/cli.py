@@ -239,6 +239,11 @@ def main(argv: Optional[List[str]] = None) -> int:
     """Main entry point for the CLI."""
     try:
         config = parse_args(argv if argv is not None else None)
+
+        # Ensure log file is set
+        if config.log_file is None:
+            config.log_file = Path("ndetect.log")
+
         logger = setup_logging(config.log_file, config.verbose)
         console = Console()
 

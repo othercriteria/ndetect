@@ -2,14 +2,49 @@
 
 import json
 import logging
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, Optional, Union
 
 from ndetect.types import JsonDict
 
-# Add global variable for logger instance
-_logger_instance: Optional["StructuredLogger"] = None
+
+class StructuredLogger(logging.Logger):
+    """Logger that supports structured logging with fields."""
+
+    def debug_with_fields(self, msg: str, **fields: Any) -> None:
+        """Log a debug message with structured fields."""
+        if fields:
+            msg = f"{msg} {fields}"
+        self.debug(msg)
+
+    def info_with_fields(self, msg: str, **fields: Any) -> None:
+        """Log a debug message with structured fields (at DEBUG level).
+
+        Note: All structured logging is done at DEBUG level to keep the console clean.
+        Use regular info() for user-facing messages.
+        """
+        if fields:
+            msg = f"{msg} {fields}"
+        # Log structured data at DEBUG level
+        self.debug(msg)
+
+    def warning_with_fields(self, msg: str, **fields: Any) -> None:
+        """Log a warning message with structured fields."""
+        if fields:
+            msg = f"{msg} {fields}"
+        self.warning(msg)
+
+    def error_with_fields(self, msg: str, **fields: Any) -> None:
+        """Log an error message with structured fields."""
+        if fields:
+            msg = f"{msg} {fields}"
+        self.error(msg)
+
+
+# Global logger instance
+_logger_instance: Optional[StructuredLogger] = None
 
 
 class JsonFormatter(logging.Formatter):
@@ -44,92 +79,61 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(log_entry)
 
 
-class StructuredLogger(logging.Logger):
-    """Logger with additional structured logging capabilities."""
-
-    def info_with_fields(self, message: str, **kwargs: Any) -> None:
-        """Log at INFO level with structured fields."""
-        extra = {"extra_fields": kwargs}
-        self.info(message, extra=extra)
-
-    def error_with_fields(self, message: str, **kwargs: Any) -> None:
-        """Log at ERROR level with structured fields."""
-        extra = {"extra_fields": kwargs}
-        self.error(message, extra=extra)
-
-    def debug_with_fields(self, message: str, **kwargs: Any) -> None:
-        """Log at DEBUG level with structured fields."""
-        extra = {"extra_fields": kwargs}
-        self.debug(message, extra=extra)
-
-    def warning_with_fields(self, message: str, **kwargs: Any) -> None:
-        """Log at WARNING level with structured fields."""
-        extra = {"extra_fields": kwargs}
-        self.warning(message, extra=extra)
-
-
-# Register our logger class
-logging.setLoggerClass(StructuredLogger)
-
-
-def get_logger() -> "StructuredLogger":
-    """Get or create the global logger instance."""
+def get_logger() -> StructuredLogger:
+    """Get or create the logger instance."""
     global _logger_instance
     if _logger_instance is None:
-        _logger_instance = setup_logging()
+        # Register our custom logger class
+        logging.setLoggerClass(StructuredLogger)
+
+        # Create a basic logger with just stderr output for early logging
+        logger = logging.getLogger("ndetect")
+        if not isinstance(logger, StructuredLogger):
+            raise RuntimeError("Logger instantiation failed")
+
+        if not logger.handlers:
+            handler = logging.StreamHandler(sys.stderr)
+            handler.setFormatter(logging.Formatter("%(message)s"))
+            handler.setLevel(logging.INFO)  # Changed from WARNING to INFO
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)  # Changed from WARNING to INFO
+        _logger_instance = logger
+    assert _logger_instance is not None
     return _logger_instance
 
 
 def setup_logging(
-    log_file: Optional[Path] = None, verbose: bool = False
-) -> "StructuredLogger":
-    """
-    Configure logging for ndetect.
+    log_file: Union[str, Path], verbose: bool = False
+) -> StructuredLogger:
+    """Set up logging configuration."""
+    if log_file is None:
+        raise ValueError("log_file cannot be None")
 
-    Args:
-        log_file: Optional path to log file. If None, only log to console.
-        verbose: If True, set log level to DEBUG.
-
-    Returns:
-        StructuredLogger: Configured logger with structured logging capabilities.
-    """
     global _logger_instance
-    if _logger_instance is not None:
-        # If we have an existing logger but need to add a file handler
-        if log_file and not any(
-            isinstance(h, logging.FileHandler) for h in _logger_instance.handlers
-        ):
-            file_handler = logging.FileHandler(log_file)
-            file_handler.setFormatter(JsonFormatter())
-            file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-            _logger_instance.addHandler(file_handler)
-            # Update existing logger level if verbose
-            if verbose:
-                _logger_instance.setLevel(logging.DEBUG)
-        return _logger_instance
+    logger = get_logger()
 
-    # Create logger and explicitly cast to StructuredLogger
-    logger = cast(StructuredLogger, logging.getLogger("ndetect"))
-    logger.setLevel(logging.DEBUG if verbose else logging.INFO)
-    logger.handlers = []  # Clear any existing handlers
+    # Clear any existing handlers
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
 
-    # Create formatters
-    json_formatter = JsonFormatter()
-    console_formatter = logging.Formatter("%(message)s")  # Keep console output simple
+    # Set up file handler for all messages (DEBUG and above)
+    file_handler = logging.FileHandler(str(log_file))
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
+    logger.addHandler(file_handler)
 
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-    logger.addHandler(console_handler)
+    # Set up stream handler for user-facing messages (INFO and above by default)
+    stream_handler = logging.StreamHandler(sys.stderr)
+    stream_handler.setLevel(
+        logging.DEBUG if verbose else logging.INFO
+    )  # Changed from WARNING to INFO
+    stream_handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(stream_handler)
 
-    # File handler (if log_file is specified)
-    if log_file:
-        log_file.parent.mkdir(parents=True, exist_ok=True)
-        file_handler = logging.FileHandler(log_file)
-        file_handler.setFormatter(json_formatter)
-        file_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
-        logger.addHandler(file_handler)
+    # Set overall logger level to DEBUG to capture all messages
+    logger.setLevel(logging.DEBUG)
 
     _logger_instance = logger
-    return _logger_instance
+    return logger

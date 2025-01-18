@@ -1,9 +1,10 @@
 import os
 import time
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
-from typing import List, Optional
-from unittest.mock import patch
+from typing import Any, List, Optional
+from unittest.mock import Mock, patch
 
 import pytest
 from rich.console import Console
@@ -12,7 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
-from ndetect.operations import MoveOperation
+from ndetect.operations import MoveOperation, select_keeper
 from ndetect.types import Action
 from ndetect.ui import InteractiveUI
 
@@ -286,3 +287,287 @@ def test_prompt_for_action_help(monkeypatch: pytest.MonkeyPatch) -> None:
     # Verify help action is returned
     action = ui.prompt_for_action()
     assert action == Action.HELP
+
+
+def test_unified_keeper_selection_behavior(tmp_path: Path) -> None:
+    """Test that move and delete operations handle keeper selection consistently."""
+    # Create test files
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file3 = tmp_path / "file3.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+    file3.write_text("content3")
+
+    # Make file3 the newest
+    current_time = time.time()
+    os.utime(file1, (current_time - 300, current_time - 300))
+    os.utime(file2, (current_time - 200, current_time - 200))
+    os.utime(file3, (current_time - 100, current_time - 100))
+
+    # Configure UI with retention config
+    console = Console(force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    ui = InteractiveUI(
+        console=console, move_config=move_config, retention_config=retention_config
+    )
+
+    # Test delete operation with default selection
+    with (
+        patch.object(Prompt, "ask", return_value=""),  # Empty input to use default
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files") as mock_delete,
+    ):
+        result = ui.handle_delete([file1, file2, file3])
+        assert result is True
+        mock_delete.assert_called_once()
+        files_to_delete = mock_delete.call_args[0][0]
+        assert len(files_to_delete) == 2
+        assert file1 in files_to_delete
+        assert file2 in files_to_delete
+        assert file3 not in files_to_delete  # keeper should not be deleted
+
+    # Test move operation with default selection
+    with (
+        patch.object(Prompt, "ask", return_value=""),  # Empty input to use default
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.execute_moves") as mock_execute,
+        patch(
+            "ndetect.ui.prepare_moves",
+            return_value=[
+                MoveOperation(
+                    source=f, destination=tmp_path / "duplicates" / f.name, group_id=1
+                )
+                for f in [file1, file2]  # Exclude file3 (keeper)
+            ],
+        ),
+    ):
+        result = ui.handle_move([file1, file2, file3])
+        assert result is True
+        mock_execute.assert_called_once()
+        moves = mock_execute.call_args[0][0]
+        moved_files = {move.source for move in moves}
+        assert len(moved_files) == 2
+        assert file1 in moved_files
+        assert file2 in moved_files
+        assert file3 not in moved_files  # keeper should not be moved
+
+
+def test_keeper_selection_happens_once(tmp_path: Path) -> None:
+    """Test that keeper selection only happens once per operation."""
+    # Create test files
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    # Configure UI with retention config
+    console = Console(force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    ui = InteractiveUI(
+        console=console, move_config=move_config, retention_config=retention_config
+    )
+
+    # Mock select_keeper to track calls
+    mock_select = Mock(return_value=file2)
+
+    with (
+        patch("ndetect.ui.select_keeper", mock_select),
+        patch.object(Prompt, "ask", return_value=""),  # Empty input
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files"),
+    ):
+        ui.handle_delete([file1, file2])
+
+        # Should only be called once per operation
+        assert (
+            mock_select.call_count == 1
+        ), f"select_keeper was called {mock_select.call_count} times, expected 1"
+
+
+def test_empty_input_uses_default_selection(tmp_path: Path) -> None:
+    """Test that pressing Enter uses the default selection (all except keeper)."""
+    # Create test files
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file3 = tmp_path / "file3.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+    file3.write_text("content3")
+
+    # Make file3 the newest (keeper)
+    current_time = time.time()
+    os.utime(file1, (current_time - 300, current_time - 300))
+    os.utime(file2, (current_time - 200, current_time - 200))
+    os.utime(file3, (current_time - 100, current_time - 100))
+
+    console = Console(force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    ui = InteractiveUI(
+        console=console, move_config=move_config, retention_config=retention_config
+    )
+
+    # Track what files are actually processed
+    processed_files = []
+
+    def mock_delete(files: List[Path]) -> None:
+        processed_files.extend(files)
+
+    with (
+        patch.object(Prompt, "ask", return_value=""),  # User presses Enter
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files", side_effect=mock_delete),
+    ):
+        result = ui.handle_delete([file1, file2, file3])
+
+        assert result is True, "Operation should succeed with default selection"
+        assert (
+            len(processed_files) == 2
+        ), f"Expected 2 files to be processed, got {len(processed_files)}"
+        assert file1 in processed_files, "Older file1 should be selected"
+        assert file2 in processed_files, "Older file2 should be selected"
+        assert (
+            file3 not in processed_files
+        ), "Newest file (keeper) should not be selected"
+
+
+def test_logger_configuration(tmp_path: Path) -> None:
+    """Test that logger is configured correctly with no duplicate handlers."""
+    import logging
+    import sys
+
+    from ndetect.logging import get_logger, setup_logging
+
+    # First clear any existing handlers
+    logger = get_logger()
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+
+    # Set up logging fresh
+    log_file = tmp_path / "test.log"
+    setup_logging(log_file)
+
+    # Get all handlers
+    handlers = logger.handlers
+
+    # Categorize handlers
+    stream_handlers = [
+        h
+        for h in handlers
+        if isinstance(h, logging.StreamHandler)
+        and not isinstance(h, logging.FileHandler)
+    ]
+    file_handlers = [h for h in handlers if isinstance(h, logging.FileHandler)]
+
+    # Print debug info
+    print("\nLogger configuration:")
+    print(f"Total handlers: {len(handlers)}")
+    for h in handlers:
+        print(f"Handler: {h}, type: {type(h)}, stream: {getattr(h, 'stream', None)}")
+
+    # Verify handler counts
+    assert len(stream_handlers) == 1, (
+        f"Should have exactly one StreamHandler, got {len(stream_handlers)}:\n"
+        + "\n".join(f"  {h}" for h in stream_handlers)
+    )
+    assert len(file_handlers) == 1, (
+        f"Should have exactly one FileHandler, got {len(file_handlers)}:\n"
+        + "\n".join(f"  {h}" for h in file_handlers)
+    )
+
+    # Verify handler levels and streams
+    stream_handler = stream_handlers[0]
+    file_handler = file_handlers[0]
+
+    assert (
+        file_handler.level == logging.DEBUG
+    ), f"File handler should be DEBUG level, got {file_handler.level}"
+    assert (
+        stream_handler.level == logging.INFO
+    ), f"Stream handler should be INFO level, got {stream_handler.level}"
+
+    # Verify stream handler is using stderr
+    assert (
+        stream_handler.stream == sys.stderr
+    ), f"Stream handler should use sys.stderr, got {stream_handler.stream}"
+
+    # Verify log file location
+    assert file_handler.baseFilename == str(
+        log_file
+    ), f"Log file should be at {log_file}, but was at {file_handler.baseFilename}"
+
+    # Test logging at different levels
+    test_messages = {
+        "debug": "Debug message",
+        "info": "Info message",
+        "warning": "Warning message",
+        "error": "Error message",
+    }
+
+    for level, msg in test_messages.items():
+        getattr(logger, level)(msg)
+
+    # Verify log file contents
+    log_contents = log_file.read_text()
+    print("\nLog file contents:")
+    print(log_contents)
+
+    # All messages should be in the log file
+    for msg in test_messages.values():
+        assert msg in log_contents, f"Message '{msg}' not found in log file"
+
+
+def tracked_select_keeper(*args: Any, **kwargs: Any) -> Path:
+    """Track select_keeper calls with their full stack traces."""
+    result = select_keeper(*args, **kwargs)
+    print(f"\nselect_keeper called with args: {args}")
+    print(f"Returning: {result}")
+    return result
+
+
+def test_ui_logging_and_selection_flow(tmp_path: Path, caplog: Any) -> None:
+    """Test the UI flow including logging behavior."""
+    import ndetect.ui as ui_module
+    from ndetect.operations import select_keeper
+
+    # Create test files
+    file1 = tmp_path / "dist-info/LICENSE.txt"
+    file2 = tmp_path / "site-packages/LICENSE.txt"
+    file1.parent.mkdir(parents=True)
+    file2.parent.mkdir(parents=True)
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    output = StringIO()
+    console = Console(file=output, force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+
+    def tracked_select_keeper(*args: Any, **kwargs: Any) -> Path:
+        result = select_keeper(*args, **kwargs)
+        print(f"\nselect_keeper called with args: {args}")
+        print(f"Returning: {result}")
+        return result
+
+    with (
+        patch.object(ui_module, "select_keeper", side_effect=tracked_select_keeper),
+        patch.object(Prompt, "ask", return_value=""),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.delete_files"),
+    ):
+        ui = InteractiveUI(
+            console=console, move_config=move_config, retention_config=retention_config
+        )
+
+        caplog.clear()
+        ui.handle_delete([file1, file2])
+
+        # Group log records by message to detect duplicates
+        message_sources: dict[str, list[str]] = {}
+        for record in caplog.records:
+            if record.message not in message_sources:
+                message_sources[record.message] = []
+            message_sources[record.message].append(f"{record.pathname}:{record.lineno}")

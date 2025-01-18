@@ -366,7 +366,7 @@ class InteractiveUI:
         operation_func: Callable[[List[Path]], None],
         confirm_message: Union[str, Callable[[List[Path]], str]],
     ) -> bool:
-        """Handle file operations with optional retention-based selection."""
+        """Handle file operations with retention-based selection."""
         if not files:
             return False
 
@@ -386,6 +386,11 @@ class InteractiveUI:
                     operation="select_keeper",
                     keeper=str(keeper),
                 )
+                # Default selection is all files except keeper
+                files_to_process = [f for f in files if f != keeper]
+                self.console.print(
+                    f"\n[green]Default keeper selected: {keeper}[/green]"
+                )
             except Exception as e:
                 self.logger.error_with_fields(
                     f"Failed to select keeper: {e}",
@@ -394,22 +399,19 @@ class InteractiveUI:
                 )
                 return False
 
-        # For move operations with retention config, automatically select
-        # non-keeper files
-        if operation == "move" and keeper is not None:
-            files_to_process = [f for f in files if f != keeper]
-        else:
-            # For delete operations or no retention config, let user select files
-            try:
-                selected_indices = self._prompt_for_indices(
-                    files,
-                    f"Enter file numbers to {operation} (comma-separated)",
-                    keeper=keeper,
-                )
+        # Allow user to override the selection
+        try:
+            selected_indices = self._prompt_for_indices(
+                files,
+                f"Enter file numbers to {operation} (comma-separated, or Enter "
+                "to accept default)",
+                keeper=keeper,
+            )
+            if selected_indices:  # Only override if user provided input
                 files_to_process = [files[i - 1] for i in selected_indices]
-            except ValueError as e:
-                self.console.print(f"[red]Invalid selection: {e}[/red]")
-                return False
+        except ValueError as e:
+            self.console.print(f"[red]Invalid selection: {e}[/red]")
+            return False
 
         if not files_to_process:
             self.console.print(f"[yellow]No files selected for {operation}[/yellow]")
@@ -436,7 +438,7 @@ class InteractiveUI:
             )
             return True
         except Exception as e:
-            self.console.print(f"[red]Failed to {operation} files: {e}[/red]")
+            self.console.print(f"[red]Error during {operation}: {str(e)}[/red]")
             return False
 
     def handle_delete(self, files: List[Path]) -> bool:

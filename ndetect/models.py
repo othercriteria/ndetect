@@ -1,5 +1,6 @@
 """Models for representing text files and their properties."""
 
+from argparse import Namespace
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -147,52 +148,65 @@ class FileAnalyzerConfig:
 
 @dataclass
 class CLIConfig:
-    """Unified configuration for CLI operations."""
+    """Configuration for CLI operation."""
 
-    # Required settings
-    paths: List[str]
-
-    # Mode settings
-    mode: str = "interactive"
-    dry_run: bool = False
+    paths: list[str]
+    mode: str
+    threshold: float
+    base_dir: Path = field(default_factory=Path.cwd)
+    holding_dir: Path = field(default_factory=lambda: Path("duplicates"))
+    log_file: Path = field(default_factory=lambda: Path("ndetect.log"))
     verbose: bool = False
-    log_file: Optional[Path] = None
-
-    # Analysis settings
-    threshold: float = 0.85
-    min_printable_ratio: float = 0.8
+    min_printable_ratio: float = 0.7
     num_perm: int = 128
-    shingle_size: int = 5
-    chunk_size: int = 1024 * 1024
+    shingle_size: int = 3
+    follow_symlinks: bool = False
     max_workers: Optional[int] = None
-
-    # File handling settings
-    follow_symlinks: bool = True
+    dry_run: bool = False
     max_symlink_depth: int = 10
     skip_empty: bool = True
-
-    # Preview settings
     preview_chars: int = 100
     preview_lines: int = 3
-
-    # Move settings
-    holding_dir: Path = Path("holding")
     flat_holding: bool = False
-    base_dir: Optional[Path] = None
-
-    # Retention settings
     retention_strategy: str = "newest"
-    priority_paths: Optional[List[str]] = None
-    priority_first: bool = True
+    priority_paths: List[str] = field(default_factory=list)
+    priority_first: bool = False
+
+    @classmethod
+    def from_args(cls, args: Namespace) -> "CLIConfig":
+        """Create a CLIConfig from parsed command line arguments."""
+        return cls(
+            paths=args.paths,
+            mode=args.mode,
+            threshold=args.threshold,
+            base_dir=Path(args.base_dir) if args.base_dir else Path.cwd(),
+            holding_dir=Path(args.holding_dir)
+            if args.holding_dir
+            else Path("duplicates"),
+            log_file=Path(args.log_file) if args.log_file else Path("ndetect.log"),
+            verbose=args.verbose,
+            min_printable_ratio=args.min_printable_ratio,
+            num_perm=args.num_perm,
+            shingle_size=args.shingle_size,
+            follow_symlinks=args.follow_symlinks,
+            max_workers=args.max_workers,
+            dry_run=args.dry_run,
+            max_symlink_depth=args.max_symlink_depth,
+            skip_empty=not args.include_empty,
+            preview_chars=args.preview_chars,
+            preview_lines=args.preview_lines,
+            flat_holding=args.flat_holding,
+            retention_strategy=args.retention,
+            priority_paths=args.priority_paths or [],
+            priority_first=args.priority_first,
+        )
 
     def __post_init__(self) -> None:
         """Validate configuration."""
         if not self.paths:
             raise ValueError("At least one path must be provided")
-
         if self.threshold <= 0 or self.threshold > 1:
             raise ValueError("Threshold must be between 0 and 1")
-
         if self.min_printable_ratio <= 0 or self.min_printable_ratio > 1:
             raise ValueError("min_printable_ratio must be between 0 and 1")
 
