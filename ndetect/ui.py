@@ -107,12 +107,12 @@ class InteractiveUI:
         action_map = {
             "d": Action.DELETE,
             "m": Action.MOVE,
-            "k": Action.KEEP,
+            "n": Action.NEXT,
             "p": Action.PREVIEW,
             "s": Action.SIMILARITIES,
             "q": Action.QUIT,
             "h": Action.HELP,
-            "": Action.KEEP,  # Default action
+            "": Action.NEXT,
         }
 
         choice = Prompt.ask(

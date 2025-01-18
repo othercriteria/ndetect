@@ -101,7 +101,7 @@ The tool operates in two primary modes:
    - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
 
 1. **Available Actions**:
-   - **[k] Keep all**: No changes are made to this group, and it won't appear again
+   - **[n] Next group**: Skip to the next group without making changes
    - **[d] Delete duplicates**: Select files to delete (with space-separated numbers,
      'all', or 'none')
    - **[m] Move duplicates**: Select files to move to the holding directory

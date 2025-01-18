@@ -1,9 +1,11 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from rich.console import Console
 
-from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig
+from ndetect.cli import process_group
+from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig, TextFile
+from ndetect.similarity import SimilarityGraph
 from ndetect.types import Action
 from ndetect.ui import InteractiveUI
 
@@ -125,3 +127,38 @@ def test_preview_with_custom_config(tmp_path: Path) -> None:
 
     plain_output = Text.from_ansi(output).plain
     assert "This is" in plain_output
+
+
+def test_process_group_preview_continues(tmp_path: Path) -> None:
+    """Test that preview action allows continuing with the same group."""
+    file1 = tmp_path / "test1.txt"
+    file2 = tmp_path / "test2.txt"
+    file1.write_text("hello world")
+    file2.write_text("hello world")
+
+    text_files = [
+        TextFile.from_path(file1, compute_minhash=True),
+        TextFile.from_path(file2, compute_minhash=True),
+    ]
+
+    graph = SimilarityGraph(threshold=0.5)
+    graph.add_files(text_files)
+    groups = graph.get_groups()
+
+    console = Console(force_terminal=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=MoveConfig(holding_dir=Path("holding")),
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    # Mock sequence: preview -> similarities -> keep
+    mock_prompt = Mock(side_effect=[Action.PREVIEW, Action.SIMILARITIES, Action.NEXT])
+    ui.prompt_for_action = mock_prompt  # type: ignore
+
+    # Run the process
+    action = process_group(ui, graph, groups[0])
+
+    # Verify all actions were called
+    assert mock_prompt.call_count == 3
+    assert action == Action.NEXT  # Final action should be next

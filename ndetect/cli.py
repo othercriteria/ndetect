@@ -308,18 +308,22 @@ def process_group(
                 if files:
                     if ui.handle_delete(files):
                         graph.remove_files(files)
+                        if not ui.move_config.dry_run:
+                            return Action.NEXT
             case Action.PREVIEW:
                 ui.show_preview(group.files)
+                continue
             case Action.SIMILARITIES:
                 similarities = graph.get_group_similarities(group.files)
                 ui.show_similarities(group.files, similarities)
+                continue
             case Action.MOVE:
                 selected = ui.select_files(group.files, "Select files to move")
                 if selected:
                     moves = ui.create_moves(selected, group_id=group.id)
                     ui.pending_moves.extend(moves)
-                    return Action.KEEP
-            case Action.KEEP:
+                    return Action.NEXT
+            case Action.NEXT:
                 return action
             case Action.QUIT:
                 return action
@@ -375,7 +379,7 @@ def handle_interactive_mode(
         action = ui.prompt_for_action()
 
         match action:
-            case Action.KEEP:
+            case Action.NEXT:
                 graph.remove_group(group.files)
             case Action.DELETE:
                 if ui.handle_delete(group.files):

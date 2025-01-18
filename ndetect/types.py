@@ -33,7 +33,7 @@ class SimilarGroup:
 class Action(Enum):
     """Available actions for processing file groups."""
 
-    KEEP = auto()  # Keep all files (k)
+    NEXT = auto()  # Next group (n)
     DELETE = auto()  # Delete selected files (d)
     MOVE = auto()  # Move selected files (m)
     PREVIEW = auto()  # Preview file contents (p)
