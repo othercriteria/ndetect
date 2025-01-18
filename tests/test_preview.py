@@ -152,7 +152,7 @@ def test_process_group_preview_continues(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
-    # Mock sequence: preview -> similarities -> keep
+    # Mock sequence: preview -> similarities -> next
     mock_prompt = Mock(side_effect=[Action.PREVIEW, Action.SIMILARITIES, Action.NEXT])
     ui.prompt_for_action = mock_prompt  # type: ignore
 

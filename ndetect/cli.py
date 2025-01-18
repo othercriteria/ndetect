@@ -305,18 +305,16 @@ def process_group(
         match action:
             case Action.DELETE:
                 files = ui.select_files(group.files, "Select files to delete")
-                if files:
-                    if ui.handle_delete(files):
-                        graph.remove_files(files)
-                        if not ui.move_config.dry_run:
-                            return Action.NEXT
+                if ui.handle_delete(files):
+                    graph.remove_files(files)
+                    return Action.NEXT  # Always advance after successful deletion
             case Action.PREVIEW:
                 ui.show_preview(group.files)
-                continue
+                continue  # Stay on same group
             case Action.SIMILARITIES:
                 similarities = graph.get_group_similarities(group.files)
                 ui.show_similarities(group.files, similarities)
-                continue
+                continue  # Stay on same group
             case Action.MOVE:
                 selected = ui.select_files(group.files, "Select files to move")
                 if selected:

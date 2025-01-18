@@ -51,7 +51,7 @@ def test_dry_run_file_selection(tmp_path: Path) -> None:
 
 
 def test_dry_run_process_group_continuation(tmp_path: Path) -> None:
-    """Test that process_group continues after dry run operation."""
+    """Test that process_group advances after dry run operation."""
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("content1")
@@ -72,12 +72,12 @@ def test_dry_run_process_group_continuation(tmp_path: Path) -> None:
 
     # Mock keeper selection to always return file1
     with patch("ndetect.ui.select_keeper", return_value=file1):
-        # Create mock sequences for different prompts
-        action_responses = ["d", "q"]
+        # Create mock sequence for different prompts
+        action_responses = ["d"]  # Just delete, no need for quit
         confirm_responses = [
-            False,
-            True,
-        ]  # First False for keeper override, then True for confirmation
+            False,  # For keeper override
+            True,  # For deletion confirmation
+        ]
         selection_responses = ["2"]
 
         def mock_prompt(*args: Any, **kwargs: Any) -> str:
@@ -93,7 +93,8 @@ def test_dry_run_process_group_continuation(tmp_path: Path) -> None:
         ):
             action = process_group(ui, graph, group)
 
-        assert action == Action.QUIT
+        # Verify we advance to next group after dry-run delete
+        assert action == Action.NEXT
 
 
 def test_dry_run_keeper_selection(tmp_path: Path) -> None:
