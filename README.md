@@ -359,7 +359,7 @@ The following parameters can be customized:
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.10 or higher (tested up to 3.14-alpha)
 
 ## Security
 
