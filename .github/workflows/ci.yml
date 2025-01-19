@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.10", "3.11", "3.12", "3.13-beta"]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -29,7 +29,7 @@ jobs:
     - name: Install markdownlint
       run: npm install -g markdownlint-cli
     - name: Lint markdown files
-      run: markdownlint --fix "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "docs/**/*.md" ".github/**/*.md"
+      run: markdownlint --fix "README.md" "CHANGELOG.md" "CONTRIBUTING.md" "SECURITY.md" "docs/**/*.md" ".github/**/*.md"
     - name: Lint with ruff
       run: ruff check .
     - name: Type check with mypy
