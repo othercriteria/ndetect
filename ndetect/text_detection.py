@@ -170,6 +170,7 @@ def scan_paths(
     return text_files
 
 
+# ruff: noqa: C901
 def cleanup_resources(executor: ProcessPoolExecutor, timeout: float = 30.0) -> None:
     """Ensure proper cleanup of process pool resources.
 
@@ -196,8 +197,18 @@ def cleanup_resources(executor: ProcessPoolExecutor, timeout: float = 30.0) -> N
             )
             # Force terminate remaining processes
             for process in multiprocessing.active_children():
-                process.terminate()
-                process.join(timeout=1.0)
+                try:
+                    process.terminate()
+                    # Add explicit join with timeout
+                    process.join(timeout=1.0)
+                except Exception as e:
+                    logger.error_with_fields(
+                        "Failed to terminate process during cleanup",
+                        operation="cleanup",
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                        pid=process.pid if hasattr(process, "pid") else None,
+                    )
 
     except KeyboardInterrupt:
         logger.warning_with_fields(
@@ -205,7 +216,17 @@ def cleanup_resources(executor: ProcessPoolExecutor, timeout: float = 30.0) -> N
         )
         # Handle keyboard interrupt during cleanup
         for process in multiprocessing.active_children():
-            process.terminate()
+            try:
+                process.terminate()
+                process.join(timeout=1.0)
+            except Exception as e:
+                logger.error_with_fields(
+                    "Failed to terminate process during cleanup",
+                    operation="cleanup",
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    pid=process.pid if hasattr(process, "pid") else None,
+                )
     except Exception as e:
         logger.error_with_fields(
             "Error during resource cleanup",
@@ -217,5 +238,12 @@ def cleanup_resources(executor: ProcessPoolExecutor, timeout: float = 30.0) -> N
         for process in multiprocessing.active_children():
             try:
                 process.terminate()
-            except Exception:
-                pass
+                process.join(timeout=1.0)
+            except Exception as e:
+                logger.error_with_fields(
+                    "Failed to terminate process during cleanup",
+                    operation="cleanup",
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    pid=process.pid if hasattr(process, "pid") else None,
+                )

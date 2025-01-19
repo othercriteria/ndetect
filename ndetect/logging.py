@@ -5,7 +5,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, cast
 
 from ndetect.types import JsonDict
 
@@ -79,26 +79,60 @@ class JsonFormatter(logging.Formatter):
         return json.dumps(log_entry)
 
 
-def get_logger() -> StructuredLogger:
-    """Get or create the logger instance."""
+def _configure_logger(
+    logger: StructuredLogger,
+    log_file: Optional[Union[str, Path]] = None,
+    verbose: bool = False,
+) -> None:
+    """Configure the logger with handlers and formatters.
+
+    Args:
+        logger: Logger instance to configure
+        log_file: Optional path to log file
+        verbose: Whether to enable debug logging
+    """
+    # Set overall logger level to DEBUG to capture all messages
+    logger.setLevel(logging.DEBUG)
+
+    # Set up stream handler for user-facing messages (INFO and above by default)
+    stream_handler = logging.StreamHandler(sys.stderr)
+    stream_handler.setLevel(logging.DEBUG if verbose else logging.INFO)
+    stream_handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(stream_handler)
+
+    # Add file handler if log file specified
+    if log_file:
+        file_handler = logging.FileHandler(str(log_file))
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(
+            logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        )
+        logger.addHandler(file_handler)
+
+
+def get_logger(
+    log_file: Optional[Union[str, Path]] = None,
+    verbose: bool = False,
+) -> StructuredLogger:
+    """Get or create the global logger instance.
+
+    Args:
+        log_file: Optional path to log file
+        verbose: Whether to enable debug logging
+
+    Returns:
+        The configured logger instance
+    """
     global _logger_instance
     if _logger_instance is None:
-        # Register our custom logger class
-        logging.setLoggerClass(StructuredLogger)
-
-        # Create a basic logger with just stderr output for early logging
         logger = logging.getLogger("ndetect")
-        if not isinstance(logger, StructuredLogger):
-            raise RuntimeError("Logger instantiation failed")
-
-        if not logger.handlers:
-            handler = logging.StreamHandler(sys.stderr)
-            handler.setFormatter(logging.Formatter("%(message)s"))
-            handler.setLevel(logging.INFO)  # Changed from WARNING to INFO
-            logger.addHandler(handler)
-            logger.setLevel(logging.INFO)  # Changed from WARNING to INFO
-        _logger_instance = logger
-    assert _logger_instance is not None
+        # Cast to StructuredLogger since we're changing its class
+        logger.__class__ = StructuredLogger
+        structured_logger = cast(StructuredLogger, logger)
+        _configure_logger(structured_logger, log_file, verbose)
+        _logger_instance = structured_logger
+        if _logger_instance is None:
+            raise RuntimeError("Failed to initialize logger")
     return _logger_instance
 
 
@@ -136,4 +170,6 @@ def setup_logging(
     logger.setLevel(logging.DEBUG)
 
     _logger_instance = logger
-    return logger
+    if _logger_instance is None:
+        raise RuntimeError("Failed to initialize logger")
+    return _logger_instance

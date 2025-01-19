@@ -27,6 +27,9 @@
           types-setuptools
           # Add mypy type stubs
           typing-extensions
+          # Security scanning tools
+          bandit
+          safety
         ]);
       in
       {
@@ -80,6 +83,8 @@
 
             echo "Development environment for ndetect is ready."
             echo "Use 'dmypy check .' to run type checking"
+            echo "Use 'bandit -r ndetect/' to run security checks"
+            echo "Use 'safety scan' to check dependencies for vulnerabilities"
 
             # Ensure markdownlint is available
             echo "Markdown linting is available via 'markdownlint'"

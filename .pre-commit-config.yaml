@@ -10,6 +10,18 @@ repos:
         language: system
         pass_filenames: false
         types: [python]
+      - id: bandit
+        name: bandit
+        entry: bandit -r ndetect/ -c pyproject.toml
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: safety
+        name: safety
+        entry: safety check
+        language: system
+        pass_filenames: false
+        types: [python]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
