@@ -361,6 +361,14 @@ The following parameters can be customized:
 
 - Python 3.10 or higher
 
+## Security
+
+We take security seriously. Please see our [Security Policy](SECURITY.md) for:
+
+- How to report vulnerabilities
+- Our response process
+- Supported versions
+
 ## Development
 
 For information about setting up a development environment and contributing to ndetect,

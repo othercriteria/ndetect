@@ -1,5 +1,11 @@
 # Contributing to ndetect
 
+## Security Issues
+
+Please review our [Security Policy](SECURITY.md) before reporting security issues.
+For standard security issues, you can use the security issue template. For critical
+vulnerabilities, please follow the private reporting process.
+
 ## Development Setup
 
 1. Ensure you have Nix installed with flakes enabled
