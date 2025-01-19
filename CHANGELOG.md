@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2024-03-21
+
+### Added
+
+- Preview functionality for file contents with configurable limits
+- Similarity score visualization for file groups
+- Dry run mode for testing operations without making changes
+- Priority path configuration for retention strategies
+- Batch processing with progress indicators
+- Comprehensive test suite for core functionality
+- Configurable MinHash parameters (permutations and shingle size)
+
+### Changed
+
+- Enhanced symlink handling with security improvements
+- Improved group management with dynamic updates
+- Optimized similarity calculations for large file sets
+- Better memory management with signature caching
+- Refined CLI interface with more detailed feedback
+
+### Fixed
+
+- Memory leaks in signature cache management
+- Edge cases in preview text truncation
+- Group recalculation after file operations
+- Symlink cycle detection and resolution
+- Permission handling in file operations
+
 ## [0.3.0] - 2024-03-21
 
 ### Added
