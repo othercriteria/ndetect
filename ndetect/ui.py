@@ -117,8 +117,8 @@ class InteractiveUI:
 
         choice = Prompt.ask(
             "\nWhat would you like to do with this group?",
-            choices=list(action_map.keys()),
-            default="",
+            choices=[k for k in action_map if k != ""],
+            default="n",
         )
 
         return action_map[choice]

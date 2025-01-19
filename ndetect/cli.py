@@ -298,23 +298,20 @@ def process_group(
     ui: InteractiveUI, graph: SimilarityGraph, group: SimilarGroup
 ) -> Action:
     """Process a group of similar files."""
-    ui.display_group(group)
-
     while True:
+        ui.display_group(group)
         action = ui.prompt_for_action()
         match action:
             case Action.DELETE:
                 files = ui.select_files(group.files, "Select files to delete")
                 if ui.handle_delete(files):
                     graph.remove_files(files)
-                    return Action.NEXT  # Always advance after successful deletion
+                    return Action.NEXT
             case Action.PREVIEW:
                 ui.show_preview(group.files)
-                continue  # Stay on same group
             case Action.SIMILARITIES:
                 similarities = graph.get_group_similarities(group.files)
                 ui.show_similarities(group.files, similarities)
-                continue  # Stay on same group
             case Action.MOVE:
                 selected = ui.select_files(group.files, "Select files to move")
                 if selected:
@@ -327,7 +324,6 @@ def process_group(
                 return action
 
 
-# ruff: noqa: C901
 def handle_interactive_mode(
     config: CLIConfig,
     console: Console,
@@ -372,30 +368,7 @@ def handle_interactive_mode(
         console.print("[yellow]No similar files found[/yellow]")
         return 0
 
-    for group in groups:
-        ui.display_group(group)
-        action = ui.prompt_for_action()
-
-        match action:
-            case Action.NEXT:
-                graph.remove_group(group.files)
-            case Action.DELETE:
-                if ui.handle_delete(group.files):
-                    graph.remove_files(group.files)
-            case Action.MOVE:
-                if ui.handle_move(group.files):
-                    graph.remove_files(group.files)
-            case Action.PREVIEW:
-                ui.show_preview(group.files)
-            case Action.SIMILARITIES:
-                similarities = graph.get_group_similarities(group.files)
-                ui.show_similarities(group.files, similarities)
-            case Action.HELP:
-                ui.show_help()
-            case Action.QUIT:
-                return 0
-
-    return 0
+    return process_interactive_groups(ui, graph)
 
 
 def handle_non_interactive_mode(

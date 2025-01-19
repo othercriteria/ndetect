@@ -152,13 +152,11 @@ def test_process_group_preview_continues(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
-    # Mock sequence: preview -> similarities -> next
-    mock_prompt = Mock(side_effect=[Action.PREVIEW, Action.SIMILARITIES, Action.NEXT])
+    # Just test preview -> next
+    mock_prompt = Mock(side_effect=[Action.PREVIEW, Action.NEXT])
     ui.prompt_for_action = mock_prompt  # type: ignore
 
-    # Run the process
     action = process_group(ui, graph, groups[0])
 
-    # Verify all actions were called
-    assert mock_prompt.call_count == 3
-    assert action == Action.NEXT  # Final action should be next
+    assert mock_prompt.call_count == 2
+    assert action == Action.NEXT

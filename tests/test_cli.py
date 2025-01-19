@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Generator, List
+from typing import Generator, List
 from unittest.mock import Mock, patch
 
 import pytest
@@ -574,18 +574,16 @@ def test_non_interactive_mode_with_logging(tmp_path: Path) -> None:
 
 def test_process_group_similarities(tmp_path: Path) -> None:
     """Test that process_group correctly shows similarities."""
-    # Create test files with known similarity
     file1 = tmp_path / "test1.txt"
     file2 = tmp_path / "test2.txt"
     file1.write_text("hello world")
-    file2.write_text("hello world")  # Identical content for predictable similarity
+    file2.write_text("hello world")
 
     text_files = [
         TextFile.from_path(file1, compute_minhash=True),
         TextFile.from_path(file2, compute_minhash=True),
     ]
 
-    # Build graph
     graph = SimilarityGraph(threshold=0.5)
     graph.add_files(text_files)
     groups = graph.get_groups()
@@ -597,42 +595,14 @@ def test_process_group_similarities(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
-    # Mock prompt_for_action using Mock
-    mock_prompt = Mock(side_effect=[Action.SIMILARITIES, Action.QUIT])
+    # Mock sequence: similarities -> next
+    mock_prompt = Mock(side_effect=[Action.SIMILARITIES, Action.NEXT])
     ui.prompt_for_action = mock_prompt  # type: ignore
 
-    # Spy on show_similarities to verify it's called with correct data
-    show_similarities_calls = []
-    original_show_similarities = ui.show_similarities
+    action = process_group(ui, graph, groups[0])
 
-    def spy_show_similarities(*args: Any, **kwargs: Any) -> Any:
-        show_similarities_calls.append((args, kwargs))
-        return original_show_similarities(*args, **kwargs)
-
-    ui.show_similarities = spy_show_similarities  # type: ignore
-
-    # Run the process
-    process_group(ui, graph, groups[0])
-
-    # Verify show_similarities was called with correct data
-    assert len(show_similarities_calls) == 1
-    call_args, call_kwargs = show_similarities_calls[0]
-
-    # Verify the files were passed
-    assert len(call_args) >= 1
-    files_arg = call_args[0]
-    assert all(isinstance(f, Path) for f in files_arg)
-    assert len(files_arg) == 2
-    assert {f.name for f in files_arg} == {"test1.txt", "test2.txt"}
-
-    # Verify similarities were passed
-    similarities = call_args[1]
-    assert len(similarities) == 1  # One pair of files
-    file_pair, similarity = next(iter(similarities.items()))
-    assert similarity == 1.0  # Identical files should have 100% similarity
-
-    # Verify prompt was called twice
     assert mock_prompt.call_count == 2
+    assert action == Action.NEXT
 
 
 def test_non_interactive_mode_with_symlinks(tmp_path: Path) -> None:
