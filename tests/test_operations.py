@@ -4,7 +4,7 @@ import shutil
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List
+from typing import Any, List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -345,3 +345,44 @@ def test_execute_moves_updates_status(tmp_path: Path) -> None:
     assert not file2.exists(), "Source file2 should be moved"
     assert (dest_dir / "test1.txt").exists(), "Destination file1 should exist"
     assert (dest_dir / "test2.txt").exists(), "Destination file2 should exist"
+
+
+def test_prepare_moves_respects_existing_keeper(tmp_path: Path) -> None:
+    """Test that prepare_moves doesn't override an existing keeper selection."""
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    # Set different timestamps to make file2 newer
+    current_time = time.time()
+    os.utime(file1, (current_time - 100, current_time - 100))
+    os.utime(file2, (current_time, current_time))
+
+    holding_dir = tmp_path / "duplicates"
+    retention_config = RetentionConfig(strategy="newest")
+
+    # Track keeper selections
+    keeper_selections = []
+
+    def mock_select_keeper(
+        files: List[Path], config: RetentionConfig, base_dir: Optional[Path] = None
+    ) -> Path:
+        selected = file2  # Always select newer file
+        keeper_selections.append(selected)
+        return selected
+
+    with patch("ndetect.operations.select_keeper", side_effect=mock_select_keeper):
+        moves = prepare_moves(
+            files=[file1, file2],
+            holding_dir=holding_dir,
+            retention_config=retention_config,
+        )
+
+        print("\nDebug - prepare_moves keeper selections:")
+        for i, keeper in enumerate(keeper_selections, 1):
+            print(f"  Selection {i}: {keeper}")
+
+        assert len(keeper_selections) == 1, "Keeper should only be selected once"
+        assert len(moves) == 1, "Should only create one move"
+        assert moves[0].source == file1, "Should move older file"

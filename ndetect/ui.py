@@ -3,7 +3,7 @@
 from contextlib import suppress
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple
 
 from rich.console import Console
 from rich.panel import Panel
@@ -364,20 +364,33 @@ class InteractiveUI:
         )
         self.console.print(panel)
 
-    def _select_keeper(self, group: SimilarGroup) -> None:
-        """Select a keeper file for the group, with optional user override."""
-        if group.keeper:
-            return
+    def _handle_keeper_selection(self, group: SimilarGroup) -> Optional[Path]:
+        """Handle user input for keeper selection and return selected keeper."""
+        self.display_files(group.files)  # Show numbered list of files
+        keeper_input = Prompt.ask(
+            "\nSelect keeper file number",
+            choices=[str(i) for i in range(1, len(group.files) + 1)],
+        )
 
-        # Get default keeper based on retention config
-        group.keeper = select_keeper(group.files, self.retention_config)
-        self.console.print(f"\nDefault keeper selected: {group.keeper}")
+        try:
+            keeper_idx = int(keeper_input) - 1
+            if 0 <= keeper_idx < len(group.files):
+                return group.files[keeper_idx]
+        except ValueError:
+            self.show_error("Invalid keeper selection, using default")
+        return None
 
-        if not Confirm.ask("\nDo you want to select a different keeper?"):
-            return
+    def _select_keeper(self, group: SimilarGroup) -> Path:
+        """Select a keeper file from the group."""
+        keeper = group.keeper or select_keeper(group.files, self.retention_config)
+        self.console.print(f"\nDefault keeper selected: \n{keeper}")
 
-        self._display_keeper_selection_table(group.files)
-        self._handle_keeper_selection(group)
+        if Confirm.ask("Do you want to select a different keeper?"):
+            new_keeper = self._handle_keeper_selection(group)
+            if new_keeper:
+                keeper = new_keeper
+
+        return keeper
 
     def _display_keeper_selection_table(self, files: List[Path]) -> None:
         """Display a numbered table of files for keeper selection."""
@@ -387,23 +400,6 @@ class InteractiveUI:
         for idx, file in enumerate(files, 1):
             table.add_row(str(idx), str(file))
         self.console.print(table)
-
-    def _handle_keeper_selection(self, group: SimilarGroup) -> None:
-        """Handle user input for keeper selection."""
-        keeper_input = Prompt.ask(
-            "\nSelect keeper file number",
-            choices=[str(i) for i in range(1, len(group.files) + 1)],
-        )
-
-        try:
-            keeper_idx = int(keeper_input) - 1
-            if 0 <= keeper_idx < len(group.files):
-                group.keeper = group.files[keeper_idx]
-                self.console.print(f"\nNew keeper selected: {group.keeper}")
-            else:
-                self.show_error("Invalid keeper selection, using default")
-        except ValueError:
-            self.show_error("Invalid keeper selection, using default")
 
     def _get_files_to_process(self, group: SimilarGroup) -> List[Path]:
         """Get list of files to process, excluding the keeper."""
@@ -423,69 +419,130 @@ class InteractiveUI:
         group: SimilarGroup,
         operation: str,
         operation_func: Callable[[List[Path]], None],
-        confirm_message: Union[str, Callable[[List[Path]], str]],
+        confirm_message: Callable[[List[Path]], str],
     ) -> bool:
-        """Handle file operations with dry run support."""
-        try:
-            # Select keeper and get files to process
-            self._select_keeper(group)
+        """Handle a file operation with keeper selection and confirmation."""
+        if not group.files:
+            return False
+
+        # Select keeper first
+        self._select_keeper(group)
+        if not group.keeper:
+            return False
+
+        if operation == "move":
+            files_to_process = group.files
+        elif operation == "delete":
+            # Exclude the keeper from the delete operation
             files_to_process = self._get_files_to_process(group)
-            if not files_to_process:
-                return False
+        else:
+            raise ValueError(f"Unsupported operation: {operation}")
 
-            # Get confirmation message and prompt user
-            msg = (
-                confirm_message
-                if isinstance(confirm_message, str)
-                else confirm_message(files_to_process)
-            )
-            if not Confirm.ask(f"\n{msg}"):
-                return False
+        if not files_to_process:
+            return False
 
-            # Handle dry run mode
-            if self.move_config and self.move_config.dry_run:
-                self._handle_dry_run(operation, files_to_process)
-                return True
+        if self.move_config and self.move_config.dry_run:
+            if operation == "move":
+                moves = prepare_moves(
+                    files=files_to_process,
+                    holding_dir=self.move_config.holding_dir,
+                    preserve_structure=self.move_config.preserve_structure,
+                    group_id=group.id,
+                    base_dir=self.move_config.holding_dir.parent
+                    if self.move_config
+                    else None,
+                    retention_config=self.retention_config,
+                    keeper=group.keeper,
+                )
+                self._handle_dry_run_move(moves)
+            elif operation == "delete":
+                self._handle_dry_run_delete(files_to_process)
+            return True
 
-            # Execute the operation
+        if Confirm.ask(confirm_message(files_to_process)):
             operation_func(files_to_process)
             return True
 
-        except Exception as e:
-            self.console.print(f"[red]Error during {operation}: {e}[/red]")
-            return False
+        return False
+
+    def _handle_dry_run_move(self, moves: List[MoveOperation]) -> None:
+        """Handle dry-run display for move operations."""
+        self.console.print("[cyan]Dry Run: The following files would be moved:[/cyan]")
+        for move in moves:
+            self.console.print(f"  {move.source} -> {move.destination}")
+
+    def _handle_dry_run_delete(self, files: List[Path]) -> None:
+        """Handle dry-run display for delete operations."""
+        self.console.print(
+            "[cyan]Dry Run: The following files would be deleted:[/cyan]"
+        )
+        for file in files:
+            self.console.print(f"  {file}")
 
     def handle_delete(self, files: List[Path]) -> bool:
-        """Handle deletion of selected files."""
-        group = SimilarGroup(id=1, files=files, similarity=1.0)
-        return self._handle_file_operation(
-            group=group,
-            operation="delete",
-            operation_func=delete_files,
-            confirm_message="Are you sure you want to delete these files?",
-        )
-
-    def handle_move(self, files: List[Path]) -> bool:
-        """Handle moving selected files to holding directory."""
-        if not self.move_config:
-            self.console.print("[red]Move operation not configured[/red]")
+        """Handle deletion of files."""
+        if not files:
             return False
 
-        group = SimilarGroup(id=1, files=files, similarity=1.0)
-        return self._handle_file_operation(
-            group=group,
-            operation="move",
-            operation_func=lambda files: execute_moves(
-                prepare_moves(
-                    files,
-                    self.move_config.holding_dir,
-                    self.move_config.preserve_structure,
-                )
-            ),
-            confirm_message=lambda files: (
-                f"Move {len(files)} files to {self.move_config.holding_dir}?"
-            ),
+        group = SimilarGroup(files=files, similarity=1.0, id=1)
+        group.keeper = select_keeper(files, self.retention_config)
+        self.console.print(f"\nDefault keeper selected: \n{group.keeper}")
+
+        if Confirm.ask("Do you want to select a different keeper?"):
+            new_keeper = self._handle_keeper_selection(group)
+            if new_keeper:
+                group.keeper = new_keeper
+
+        files_to_delete = [f for f in files if f != group.keeper]
+        if not files_to_delete:
+            self.console.print("[yellow]No files selected for deletion[/yellow]")
+            return False
+
+        if self.move_config.dry_run:
+            self._handle_dry_run("delete", files_to_delete)
+            return False
+
+        if Confirm.ask("Are you sure you want to delete these files?"):
+            delete_files(files_to_delete)
+            return True
+
+        return False
+
+    def handle_move(self, files: List[Path]) -> bool:
+        """Handle moving of files."""
+        if not files:
+            return False
+
+        group = SimilarGroup(files=files, similarity=1.0, id=1)
+        group.keeper = select_keeper(files, self.retention_config)
+        self.console.print(f"\nDefault keeper selected: \n{group.keeper}")
+
+        if Confirm.ask("Do you want to select a different keeper?"):
+            new_keeper = self._handle_keeper_selection(group)
+            if new_keeper:
+                group.keeper = new_keeper
+
+        moves = prepare_moves(
+            files=files,
+            holding_dir=self.move_config.holding_dir,
+            preserve_structure=self.move_config.preserve_structure,
+            retention_config=self.retention_config,
+            keeper=group.keeper,
         )
+
+        if not moves:
+            self.console.print("[yellow]No files selected for moving[/yellow]")
+            return False
+
+        if self.move_config.dry_run:
+            self._handle_dry_run("move", [m.source for m in moves])
+            return False
+
+        if Confirm.ask("Are you sure you want to move these files?"):
+            execute_moves(moves)
+            return True
+
+        return False
 
     def _prompt_for_indices(
         self, files: List[Path], prompt: str, keeper: Optional[Path] = None

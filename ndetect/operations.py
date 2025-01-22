@@ -94,13 +94,17 @@ def prepare_moves(
     group_id: int = 0,
     base_dir: Optional[Path] = None,
     retention_config: Optional[RetentionConfig] = None,
+    keeper: Optional[Path] = None,
 ) -> List[MoveOperation]:
     """Prepare move operations for a group of files."""
     if not files:
         return []
 
-    # Select which file to keep based on retention config
-    keeper = select_keeper(files, retention_config or RetentionConfig(), base_dir)
+    # Use the provided keeper if available; otherwise, select based on config
+    if keeper is None:
+        if retention_config is None:
+            retention_config = RetentionConfig()
+        keeper = select_keeper(files, retention_config, base_dir)
 
     # Create moves for all files except the keeper
     moves: List[MoveOperation] = []

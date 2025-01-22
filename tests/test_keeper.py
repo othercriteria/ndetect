@@ -3,7 +3,7 @@
 import os
 import time
 from pathlib import Path
-from typing import Any
+from typing import List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -93,32 +93,21 @@ def test_select_keeper_with_override(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
-    def mock_prompt(*args: Any, **kwargs: Any) -> str:
-        _prompt = str(kwargs.get("prompt", ""))
-        choices = kwargs.get("choices", [])
-
-        # If we get choices 1,2,3, it's the keeper selection
-        if choices == ["1", "2", "3"]:
+    def mock_ask(prompt: str, choices: Optional[List[str]] = None) -> str:
+        if "Select keeper file number" in str(prompt):
+            assert choices == [
+                "1",
+                "2",
+                "3",
+            ], f"Expected choices [1,2,3], got {choices}"
             return "2"  # Select file2 as keeper
-
+        if "Do you want to select a different keeper?" in str(prompt):
+            return "y"
         return ""
 
-    def mock_confirm(*args: Any, **kwargs: Any) -> bool:
-        prompt = str(args[0] if args else kwargs.get("prompt", ""))
-
-        # Always confirm keeper override
-        if "Do you want to select a different keeper?" in prompt:
-            return True
-
-        # Always confirm deletion
-        if "Are you sure you want to delete these files?" in prompt:
-            return True
-
-        return False
-
     with (
-        patch.object(Prompt, "ask", side_effect=mock_prompt),
-        patch("ndetect.ui.Confirm.ask", side_effect=mock_confirm),
+        patch.object(Prompt, "ask", side_effect=mock_ask),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.delete_files") as mock_delete,
     ):
         result = ui.handle_delete([file1, file2, file3])

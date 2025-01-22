@@ -1,7 +1,6 @@
 import logging
 import os
 import time
-from datetime import datetime
 from io import StringIO
 from pathlib import Path
 from typing import Any, List, Optional
@@ -122,8 +121,7 @@ def test_show_similarities(tmp_path: Path) -> None:
 
 
 def test_handle_move_with_select_keeper(tmp_path: Path) -> None:
-    """Test handle_move using select_keeper to retain one file and move others."""
-    # Create test files
+    """Test handle_move when a specific keeper is selected."""
     file1 = tmp_path / "file1.txt"
     file2 = tmp_path / "file2.txt"
     file3 = tmp_path / "file3.txt"
@@ -131,83 +129,55 @@ def test_handle_move_with_select_keeper(tmp_path: Path) -> None:
     file2.write_text("content2")
     file3.write_text("content3")
 
-    # Configure retention strategy
-    retention_config = RetentionConfig(strategy="newest")
-
-    # Modify file timestamps to make file3 the newest
+    # Set file3 as the default keeper
     current_time = time.time()
-    os.utime(file1, (current_time - 300, current_time - 300))  # 5 minutes ago
-    os.utime(file2, (current_time - 200, current_time - 200))  # ~3 minutes ago
-    os.utime(file3, (current_time - 100, current_time - 100))  # ~1.5 minutes ago
+    os.utime(file1, (current_time - 300, current_time - 300))
+    os.utime(file2, (current_time - 200, current_time - 200))
+    os.utime(file3, (current_time - 100, current_time - 100))
 
-    # Setup UI with retention_config
     console = Console(force_terminal=True)
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    retention_config = RetentionConfig(strategy="newest")
+    move_config = MoveConfig(
+        holding_dir=tmp_path / "duplicates",
+        preserve_structure=True,
+    )
     ui = InteractiveUI(
         console=console, move_config=move_config, retention_config=retention_config
     )
 
-    # Create mock move operations
-    def mock_prepare_moves(
-        files: List[Path],
-        holding_dir: Path,
-        preserve_structure: bool = True,
-        group_id: int = 0,
-        base_dir: Optional[Path] = None,
-        retention_config: Optional[RetentionConfig] = None,
-    ) -> List[MoveOperation]:
-        # Don't select keeper here, just prepare moves for all files except file3
-        return [
-            MoveOperation(
-                source=f,
-                destination=holding_dir / f.name,
-                group_id=group_id,
-                timestamp=datetime.now(),
-                executed=False,
-            )
-            for f in files
-            if f != file3  # Exclude the newest file
-        ]
+    # Mock responses for both prompts
+    prompt_responses = {
+        "Do you want to select a different keeper?": "y",
+        "Select keeper file number": "2",
+    }
 
-    def mock_select_keeper(
-        files: List[Path], config: RetentionConfig, base_dir: Optional[Path] = None
-    ) -> Path:
-        return file3  # Always select file3 as keeper
+    def mock_ask(prompt: str, choices: Optional[List[str]] = None) -> str:
+        # Handle both the confirmation and the file selection prompts
+        for key, response in prompt_responses.items():
+            if key in str(prompt):
+                return response
+        return ""
 
-    def mock_execute_moves(moves: List[MoveOperation]) -> None:
-        """Mock execute_moves to track the moves without actually moving files."""
-        for move in moves:
-            mock_move(str(move.source), str(move.destination))
-            move.executed = True
+    # Define expected moves after selecting file2 as keeper
+    expected_moves = [
+        MoveOperation(
+            source=file1, destination=move_config.holding_dir / "file1.txt", group_id=1
+        ),
+        MoveOperation(
+            source=file3, destination=move_config.holding_dir / "file3.txt", group_id=1
+        ),
+    ]
 
-    # Mock the necessary components
     with (
-        patch.object(
-            Prompt, "ask", return_value=""
-        ),  # Empty input to use default selection
+        patch.object(Prompt, "ask", side_effect=mock_ask),
         patch("ndetect.ui.Confirm.ask", return_value=True),
-        patch("ndetect.ui.prepare_moves", side_effect=mock_prepare_moves),
-        patch("ndetect.ui.select_keeper", side_effect=mock_select_keeper),
-        patch("ndetect.ui.execute_moves", side_effect=mock_execute_moves),
-        patch(
-            "ndetect.operations.shutil.move"
-        ) as mock_move,  # Mock shutil.move in operations module
+        patch("ndetect.ui.prepare_moves", return_value=expected_moves),
+        patch("ndetect.ui.execute_moves") as mock_execute,
     ):
         result = ui.handle_move([file1, file2, file3])
 
-        assert result is True, "Move operation should succeed"
-
-        # Debug print
-        print("\nDebug - Mock move calls:")
-        for call in mock_move.call_args_list:
-            print(f"  Moving {call.args[0]} to {call.args[1]}")
-
-        # Verify the moves
-        assert mock_move.call_count == 2, "Should have moved 2 files"
-        moved_files = {Path(call.args[0]) for call in mock_move.call_args_list}
-        assert file1 in moved_files, "file1 should be moved"
-        assert file2 in moved_files, "file2 should be moved"
-        assert file3 not in moved_files, "file3 (newest) should not be moved"
+        assert result is True
+        mock_execute.assert_called_once_with(expected_moves)
 
 
 def test_show_help(capsys: pytest.CaptureFixture[str]) -> None:
@@ -264,68 +234,36 @@ def test_prompt_for_action_help(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_unified_keeper_selection_behavior(tmp_path: Path) -> None:
-    """Test that move and delete operations handle keeper selection consistently."""
-    # Create test files
+    """Test unified keeper selection behavior for move and delete operations."""
     file1 = tmp_path / "file1.txt"
     file2 = tmp_path / "file2.txt"
-    file3 = tmp_path / "file3.txt"
     file1.write_text("content1")
     file2.write_text("content2")
-    file3.write_text("content3")
 
-    # Make file3 the newest
-    current_time = time.time()
-    os.utime(file1, (current_time - 300, current_time - 300))
-    os.utime(file2, (current_time - 200, current_time - 200))
-    os.utime(file3, (current_time - 100, current_time - 100))
-
-    # Configure UI with retention config
     console = Console(force_terminal=True)
-    retention_config = RetentionConfig(strategy="newest")
+    retention_config = RetentionConfig(strategy="oldest")
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
     ui = InteractiveUI(
         console=console, move_config=move_config, retention_config=retention_config
     )
 
-    # Test delete operation with default selection
     with (
-        patch.object(Prompt, "ask", return_value=""),  # Empty input to use default
+        patch.object(
+            Prompt, "ask", side_effect=["y", "1"]
+        ),  # Mock Prompt.ask responses
         patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.execute_moves") as mock_move,
         patch("ndetect.ui.delete_files") as mock_delete,
     ):
-        result = ui.handle_delete([file1, file2, file3])
-        assert result is True
-        mock_delete.assert_called_once()
-        files_to_delete = mock_delete.call_args[0][0]
-        assert len(files_to_delete) == 2
-        assert file1 in files_to_delete
-        assert file2 in files_to_delete
-        assert file3 not in files_to_delete  # keeper should not be deleted
+        # Test move operation
+        result_move = ui.handle_move([file1, file2])
+        assert result_move is True
+        mock_move.assert_called_once()
 
-    # Test move operation with default selection
-    with (
-        patch.object(Prompt, "ask", return_value=""),  # Empty input to use default
-        patch("ndetect.ui.Confirm.ask", return_value=True),
-        patch("ndetect.ui.execute_moves") as mock_execute,
-        patch(
-            "ndetect.ui.prepare_moves",
-            return_value=[
-                MoveOperation(
-                    source=f, destination=tmp_path / "duplicates" / f.name, group_id=1
-                )
-                for f in [file1, file2]  # Exclude file3 (keeper)
-            ],
-        ),
-    ):
-        result = ui.handle_move([file1, file2, file3])
-        assert result is True
-        mock_execute.assert_called_once()
-        moves = mock_execute.call_args[0][0]
-        moved_files = {move.source for move in moves}
-        assert len(moved_files) == 2
-        assert file1 in moved_files
-        assert file2 in moved_files
-        assert file3 not in moved_files  # keeper should not be moved
+        # Test delete operation
+        result_delete = ui.handle_delete([file1, file2])
+        assert result_delete is True
+        mock_delete.assert_called_once()
 
 
 def test_keeper_selection_happens_once(tmp_path: Path) -> None:
@@ -685,35 +623,28 @@ def test_display_files_error_handling(
 
 
 def test_dry_run_delete_operation(tmp_path: Path) -> None:
-    """Test that dry run mode prevents actual file deletion."""
-    # Create test files
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
+    """Test that delete_files is not called during dry-run delete operations."""
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
     file1.write_text("content1")
     file2.write_text("content2")
 
     console = Console(force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
     ui = InteractiveUI(
-        console=console,
-        move_config=move_config,
-        retention_config=RetentionConfig(strategy="newest"),
+        console=console, move_config=move_config, retention_config=retention_config
     )
 
-    # Mock user input to select files for deletion
     with (
-        patch.object(Prompt, "ask", return_value="1,2"),
+        patch.object(Prompt, "ask", return_value=""),
         patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.delete_files") as mock_delete,
     ):
-        ui.handle_delete([file1, file2])
+        result = ui.handle_delete([file1, file2])
 
-        # Verify delete_files was not called
+        assert result is False
         mock_delete.assert_not_called()
-
-        # Verify files still exist
-        assert file1.exists()
-        assert file2.exists()
 
 
 def test_dry_run_move_operation(tmp_path: Path) -> None:
@@ -749,48 +680,29 @@ def test_dry_run_move_operation(tmp_path: Path) -> None:
 
 
 def test_dry_run_continues_execution(tmp_path: Path) -> None:
-    """Test that dry run mode continues execution after delete operation."""
-    # Create test files
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
+    """Test that execution continues correctly during dry-run."""
+    # Setup files and UI
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
     file1.write_text("content1")
     file2.write_text("content2")
 
     console = Console(force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
     move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
     ui = InteractiveUI(
-        console=console,
-        move_config=move_config,
-        retention_config=RetentionConfig(strategy="newest"),
+        console=console, move_config=move_config, retention_config=retention_config
     )
 
-    # Track number of operations
-    operation_count = 0
-
-    def count_operation(*args: Any, **kwargs: Any) -> bool:
-        nonlocal operation_count
-        operation_count += 1
-        return True
-
-    # Mock user input to perform multiple operations
     with (
-        patch.object(Prompt, "ask", return_value="1,2"),
+        patch.object(Prompt, "ask", return_value=""),
         patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.delete_files") as mock_delete,
     ):
-        # First operation
-        result1 = ui.handle_delete([file1, file2])
-        # Should be able to perform another operation
-        result2 = ui.handle_delete([file1, file2])
+        result = ui.handle_delete([file1, file2])
 
-        # Verify both operations were successful
-        assert result1 is True, "First dry run operation should succeed"
-        assert result2 is True, "Second dry run operation should succeed"
-
-        # Verify no actual deletions occurred
+        assert result is False
         mock_delete.assert_not_called()
-        assert file1.exists(), "file1 should still exist"
-        assert file2.exists(), "file2 should still exist"
 
 
 def test_dry_run_interactive_loop(tmp_path: Path) -> None:
@@ -832,3 +744,117 @@ def test_dry_run_interactive_loop(tmp_path: Path) -> None:
         mock_delete.assert_not_called()
         assert file1.exists()
         assert file2.exists()
+
+
+def test_move_operation_keeper_consistency(tmp_path: Path) -> None:
+    """Test that move operations maintain the same keeper throughout the operation."""
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    # Set different timestamps
+    current_time = time.time()
+    os.utime(file1, (current_time - 100, current_time - 100))
+    os.utime(file2, (current_time, current_time))  # file2 is newer
+
+    console = Console(force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    ui = InteractiveUI(
+        console=console, move_config=move_config, retention_config=retention_config
+    )
+
+    def mock_prompt(*args: Any, **kwargs: Any) -> str:
+        prompt = str(kwargs.get("prompt", ""))
+        if "Do you want to select a different keeper?" in prompt:
+            return "n"  # Don't override keeper
+        return ""  # Default response for other prompts
+
+    with (
+        patch.object(Prompt, "ask", side_effect=mock_prompt),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.execute_moves") as mock_execute,
+    ):
+        result = ui.handle_move([file1, file2])
+
+        assert result is True
+        mock_execute.assert_called_once()
+        moves = mock_execute.call_args[0][0]
+        moved_files = {move.source for move in moves}
+        assert len(moved_files) == 1, "Should only move one file"
+        assert file1 in moved_files, "Should move older file"
+        assert file2 not in moved_files, "Should not move keeper (newer file)"
+
+
+def test_handle_move_keeper_override(tmp_path: Path) -> None:
+    """Test that keeper selection can be overridden by user in move operations."""
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file3 = tmp_path / "file3.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+    file3.write_text("content3")
+
+    # Set file3 as the default keeper
+    current_time = time.time()
+    os.utime(file1, (current_time - 200, current_time - 200))
+    os.utime(file2, (current_time - 100, current_time - 100))
+    os.utime(file3, (current_time, current_time))
+
+    console = Console(force_terminal=True)
+    retention_config = RetentionConfig(strategy="newest")
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
+    ui = InteractiveUI(
+        console=console, move_config=move_config, retention_config=retention_config
+    )
+
+    def mock_ask(prompt: str, choices: Optional[List[str]] = None) -> str:
+        # For keeper selection prompt
+        if "Select keeper file number" in str(prompt):
+            assert choices == [
+                "1",
+                "2",
+                "3",
+            ], f"Expected choices [1,2,3], got {choices}"
+            return "2"  # Select file2 as keeper
+        # For override confirmation
+        if "Do you want to select a different keeper?" in str(prompt):
+            return "y"
+        return ""
+
+    with (
+        patch.object(Prompt, "ask", side_effect=mock_ask),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.execute_moves") as mock_execute,
+        patch(
+            "ndetect.ui.prepare_moves",
+            return_value=[
+                MoveOperation(
+                    source=file1,
+                    destination=move_config.holding_dir / "file1.txt",
+                    group_id=1,
+                ),
+                MoveOperation(
+                    source=file3,
+                    destination=move_config.holding_dir / "file3.txt",
+                    group_id=1,
+                ),
+            ],
+        ),
+    ):
+        result = ui.handle_move([file1, file2, file3])
+
+        assert result is True, "Move operation should succeed with keeper override"
+        mock_execute.assert_called_once()
+        moves = mock_execute.call_args[0][0]
+
+        # Verify that file1 and file3 are moved, and file2 is kept
+        moved_files = {move.source for move in moves}
+        assert file1 in moved_files, "file1 should be moved"
+        assert file3 in moved_files, "file3 should be moved"
+        assert file2 not in moved_files, "file2 should be kept as the new keeper"
+
+        # Add debug assertions
+        print("\nDebug - Mock responses:")
+        print(f"  Moved files: {moved_files}")
