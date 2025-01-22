@@ -79,7 +79,7 @@ def test_show_similarities(tmp_path: Path) -> None:
     assert table.columns[1].header == "File 2"
     assert table.columns[2].header == "Similarity"
 
-    # Verify table width
+    # Verify table width matches console width
     assert table.width == 200
 
     # Get rendered content for verification
@@ -97,13 +97,18 @@ def test_show_similarities(tmp_path: Path) -> None:
     # Verify we have the expected number of data rows
     assert len(data_rows) == len(similarities)
 
-    # Verify all filenames appear in the output
-    file_patterns = {"test1.txt", "test2.txt", "test3.txt"}
+    # Verify all filenames appear in the output (accounting for truncation)
+    file_patterns = {
+        "test1",
+        "test2",
+        "test3",
+    }  # Remove .txt since it might be truncated
     found_patterns = set()
     for row in data_rows:
         for pattern in file_patterns:
             if pattern in row:
                 found_patterns.add(pattern)
+
     assert found_patterns == file_patterns
 
     # Verify all percentages appear

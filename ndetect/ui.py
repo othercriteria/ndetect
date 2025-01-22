@@ -322,10 +322,24 @@ class InteractiveUI:
         self, group_files: List[Path], similarities: Dict[Tuple[Path, Path], float]
     ) -> Table:
         """Create a table for similarities display."""
-        table = Table(show_header=True, header_style="bold magenta", width=200)
-        table.add_column("File 1", style="cyan", width=80)
-        table.add_column("File 2", style="cyan", width=80)
-        table.add_column("Similarity", justify="right", style="green", width=12)
+        # Get console width and calculate column widths
+        console_width = self.console.width or 80  # Default to 80 if width not available
+
+        # Reserve space for borders and padding (approximately 10 characters)
+        available_width = console_width - 10
+
+        # Allocate 40% of space each to file columns and 20% to similarity
+        file_col_width = int(available_width * 0.4)
+        sim_col_width = int(available_width * 0.2)
+
+        table = Table(
+            show_header=True, header_style="bold magenta", width=console_width
+        )
+        table.add_column("File 1", style="cyan", width=file_col_width)
+        table.add_column("File 2", style="cyan", width=file_col_width)
+        table.add_column(
+            "Similarity", justify="right", style="green", width=sim_col_width
+        )
 
         for (file1, file2), sim in similarities.items():
             table.add_row(str(file1), str(file2), f"{sim:.2%}")
