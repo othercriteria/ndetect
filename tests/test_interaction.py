@@ -3,7 +3,7 @@
 import os
 import time
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 from unittest.mock import patch
 
 from rich.console import Console
@@ -14,37 +14,29 @@ from ndetect.operations import MoveOperation
 from ndetect.ui import InteractiveUI
 
 
-def test_handle_delete_with_retention_config(tmp_path: Path) -> None:
+def test_handle_delete_with_retention_config(
+    configurable_ui: InteractiveUI,
+    create_file_with_content: Callable[[str, str], Path],
+    mock_prompt_responses: Callable[[dict[str, Any]], Callable[..., Any]],
+) -> None:
     """Test delete handling with retention config."""
-    # Create test files with different sizes
-    file1 = tmp_path / "small.txt"
-    file2 = tmp_path / "large.txt"
-    file1.write_text("small")
-    file2.write_text("large content" * 100)  # Make sure it's larger
+    file1 = create_file_with_content("small.txt", "small")
+    file2 = create_file_with_content("large.txt", "large content" * 100)
 
-    console = Console(force_terminal=True)
-    retention_config = RetentionConfig(strategy="largest")
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates")
-    ui = InteractiveUI(
-        console=console, move_config=move_config, retention_config=retention_config
-    )
+    configurable_ui.retention_config.strategy = "largest"
 
-    # Mock responses for different prompts
-    prompt_responses = {
-        "Do you want to select a different keeper?": False,  # Don't override keeper
-        "Are you sure you want to delete these files?": True,  # Confirm deletion
+    responses = {
+        "Do you want to select a different keeper?": False,
+        "Are you sure you want to delete these files?": True,
     }
-
-    def mock_confirm(*args: Any, **kwargs: Any) -> bool:
-        msg = str(args[0] if args else kwargs.get("prompt", ""))
-        return prompt_responses.get(msg, True)
+    mock_ask = mock_prompt_responses(responses)
 
     with (
-        patch("ndetect.ui.Confirm.ask", side_effect=mock_confirm),
+        patch("ndetect.ui.Confirm.ask", side_effect=mock_ask),
         patch("ndetect.ui.delete_files") as mock_delete,
-        patch.object(Prompt, "ask", return_value=""),  # Empty response for any prompts
+        patch.object(Prompt, "ask", return_value=""),
     ):
-        result = ui.handle_delete([file1, file2])
+        result = configurable_ui.handle_delete([file1, file2])
         assert result is True
         mock_delete.assert_called_once()
         files_to_delete = mock_delete.call_args[0][0]

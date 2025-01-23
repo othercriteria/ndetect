@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Callable
 from unittest.mock import Mock, patch
 
 from rich.console import Console
@@ -8,13 +9,13 @@ from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig, TextFile
 from ndetect.similarity import SimilarityGraph
 from ndetect.types import Action
 from ndetect.ui import InteractiveUI
+from ndetect.utils import format_preview_text
 
 
-def test_preview_action_available() -> None:
+def test_preview_action_available(test_console_no_color: Console) -> None:
     """Test that preview action is available in prompt choices."""
-    console = Console(force_terminal=True)
     ui = InteractiveUI(
-        console=console,
+        console=test_console_no_color,
         move_config=MoveConfig(holding_dir=Path("holding")),
         retention_config=RetentionConfig(strategy="newest"),
     )
@@ -25,28 +26,24 @@ def test_preview_action_available() -> None:
             assert action == Action.PREVIEW
 
 
-def test_preview_content_display(tmp_path: Path) -> None:
+def test_preview_content_display(
+    tmp_path: Path,
+    configurable_ui: InteractiveUI,
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
     """Test that file preview displays correct content."""
-    # Create test file
-    test_file = tmp_path / "test.txt"
-    test_file.write_text("Line 1\nLine 2\nLine 3\nLine 4\nLine 5")
-
-    console = Console(force_terminal=True)
-    ui = InteractiveUI(
-        console=console,
-        move_config=MoveConfig(holding_dir=Path("holding")),
-        retention_config=RetentionConfig(strategy="newest"),
-        preview_config=PreviewConfig(max_chars=20, max_lines=2),
+    test_file = create_file_with_content(
+        "test.txt", "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
     )
 
-    with console.capture() as capture:
-        ui.show_preview([test_file])
+    with configurable_ui.console.capture() as capture:
+        configurable_ui.show_preview([test_file])
 
     output = capture.get()
     assert "Line 1" in output
     assert "Line 2" in output
     assert "Line 3" not in output
-    assert "..." in output  # Truncation marker
+    assert "..." in output
 
 
 def test_preview_binary_file(tmp_path: Path) -> None:
@@ -160,3 +157,29 @@ def test_process_group_preview_continues(tmp_path: Path) -> None:
 
     assert mock_prompt.call_count == 2
     assert action == Action.NEXT
+
+
+def test_preview_generation(create_text_file: Callable[[str, str], TextFile]) -> None:
+    """Test preview generation with different configurations."""
+    test_content = "line1\nline2\nline3\nline4\nline5"
+    file = create_text_file("test.txt", test_content)
+
+    # Test different preview configurations
+    test_cases = [
+        # (max_chars, max_lines, expected_output)
+        (10, 2, "line1..."),
+        (100, 2, "line1\nline2..."),
+        (5, 5, "li..."),
+        (100, 5, "line1\nline2\nline3\nline4\nline5"),
+        (100, 1, "line1..."),
+    ]
+
+    for max_chars, max_lines, expected in test_cases:
+        preview = format_preview_text(
+            Path(file.path).read_text(),  # Read content directly from file
+            max_chars=max_chars,
+            max_lines=max_lines,
+        )
+        assert (
+            preview == expected
+        ), f"Preview mismatch for config max_chars={max_chars}, max_lines={max_lines}"

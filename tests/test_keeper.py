@@ -3,7 +3,7 @@
 import os
 import time
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, List, Optional
 from unittest.mock import patch
 
 import pytest
@@ -15,16 +15,14 @@ from ndetect.operations import select_keeper
 from ndetect.ui import InteractiveUI
 
 
-def test_select_keeper_newest(tmp_path: Path) -> None:
+def test_select_keeper_newest(
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
     """Test selecting newest file as keeper."""
     # Create files with different timestamps
-    file1 = tmp_path / "old.txt"
-    file2 = tmp_path / "new.txt"
-
-    file1.write_text("old")
-    file2.write_text("new")
-
-    # Set different modification times
+    file1 = create_file_with_content("old.txt", "old")
+    file2 = create_file_with_content("new.txt", "new")
+    # Set timestamps after creation
     os.utime(file1, (1000000, 1000000))
     os.utime(file2, (2000000, 2000000))
 
@@ -33,17 +31,20 @@ def test_select_keeper_newest(tmp_path: Path) -> None:
     assert keeper == file2
 
 
-def test_select_keeper_priority_paths(tmp_path: Path) -> None:
+def test_select_keeper_priority_paths(
+    tmp_path: Path,
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
     """Test priority paths in keeper selection."""
+    # Create directory structure
     important = tmp_path / "important"
     other = tmp_path / "other"
     important.mkdir()
     other.mkdir()
 
-    file1 = important / "test1.txt"
-    file2 = other / "test2.txt"
-    file1.write_text("content")
-    file2.write_text("content")
+    # Create test files
+    file1 = create_file_with_content("important/test1.txt", "content")
+    file2 = create_file_with_content("other/test2.txt", "content")
 
     config = RetentionConfig(
         strategy="newest", priority_paths=["important/*"], priority_first=True
@@ -124,3 +125,26 @@ def test_select_keeper_with_override(tmp_path: Path) -> None:
         # Verify both other files are in deletion list
         assert file1 in files_to_delete, "file1 should be deleted"
         assert file3 in files_to_delete, "file3 should be deleted"
+
+
+def test_interactive_keeper_selection(
+    configurable_ui: InteractiveUI,
+    create_file_with_content: Callable[[str, str], Path],
+    mock_prompt_responses: Callable[[dict[str, Any]], Callable[..., Any]],
+) -> None:
+    """Test interactive keeper selection."""
+    file1 = create_file_with_content("test1.txt", "content1")
+    file2 = create_file_with_content("test2.txt", "content2")
+
+    responses = {
+        "Select keeper file number": "2",
+        "Do you want to select a different keeper?": "y",
+    }
+    mock_ask = mock_prompt_responses(responses)
+
+    with (
+        patch.object(Prompt, "ask", side_effect=mock_ask),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+    ):
+        result = configurable_ui.handle_delete([file1, file2])
+        assert result is True

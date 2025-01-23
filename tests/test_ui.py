@@ -3,7 +3,7 @@ import os
 import time
 from io import StringIO
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 from unittest.mock import Mock, patch
 
 import pytest
@@ -19,31 +19,24 @@ from ndetect.types import Action, SimilarGroup
 from ndetect.ui import InteractiveUI
 
 
-def test_show_preview_respects_limits(tmp_path: Path) -> None:
-    """Test that show_preview respects character and line limits."""
-    # Create test file with multiple lines
-    test_file = tmp_path / "test.txt"
-    test_file.write_text("Line 1\nLine 2\nLine 3\nLine 4\nLine 5")
-
-    console = Console(force_terminal=True)
-    # Use larger limits to ensure we see both lines
-    preview_config = PreviewConfig(max_chars=20, max_lines=2)
-    ui = InteractiveUI(
-        console=console,
-        move_config=MoveConfig(holding_dir=Path("holding")),
-        retention_config=RetentionConfig(strategy="newest"),
-        preview_config=preview_config,
+def test_show_preview_respects_limits(
+    tmp_path: Path,
+    configurable_ui: InteractiveUI,
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
+    """Test that preview respects max lines and chars limits."""
+    # Create a real file that exists on disk
+    test_file = create_file_with_content(
+        "test.txt", "Line 1\nLine 2\nLine 3\nLine 4\nLine 5"
     )
 
-    # Capture output
-    with console.capture() as capture:
-        ui.show_preview([test_file])
+    with configurable_ui.console.capture() as capture:
+        configurable_ui.show_preview([test_file])
 
     output = capture.get()
-    # Should show both lines since we have enough space
     assert "Line 1" in output
     assert "Line 2" in output
-    assert "Line 3" not in output
+    assert "Line 3" not in output  # Should be truncated due to max_lines=2
 
 
 def test_show_similarities(tmp_path: Path) -> None:
@@ -858,3 +851,12 @@ def test_handle_move_keeper_override(tmp_path: Path) -> None:
         # Add debug assertions
         print("\nDebug - Mock responses:")
         print(f"  Moved files: {moved_files}")
+
+
+def test_preview_empty_file_list(configurable_ui: InteractiveUI) -> None:
+    """Test preview handling of empty file list."""
+    with configurable_ui.console.capture() as capture:
+        configurable_ui.show_preview([])
+
+    output = capture.get()
+    assert "No files to preview" in output

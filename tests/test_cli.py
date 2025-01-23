@@ -125,21 +125,20 @@ def test_scan_paths_with_minhash_config(tmp_path: Path) -> None:
     assert text_files[0].has_signature()
 
 
-def test_prepare_moves_flat_structure(tmp_path: Path) -> None:
+def test_prepare_moves_flat_structure(
+    tmp_path: Path, duplicates_dir: Path, create_test_files: List[Path]
+) -> None:
     """Test move preparation with flat directory structure."""
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    file1.write_text("content")
-    file2.write_text("content")
+    files = create_test_files[:2]  # Only need 2 files
 
     moves = prepare_moves(
-        files=[file1, file2],
-        holding_dir=tmp_path / "duplicates",
+        files=files,
+        holding_dir=duplicates_dir,
         preserve_structure=False,
     )
 
     assert len(moves) == 1  # One file should be kept, one moved
-    assert moves[0].destination.parent == tmp_path / "duplicates"
+    assert moves[0].destination.parent == duplicates_dir
 
 
 def test_prepare_moves_preserved_structure(tmp_path: Path) -> None:

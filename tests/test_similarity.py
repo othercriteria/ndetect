@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 import networkx as nx
 
@@ -36,13 +37,15 @@ def test_similarity_graph_single_file(tmp_path: Path) -> None:
     assert len(graph.get_groups()) == 0  # Single file should not form a group
 
 
-def test_similarity_graph_similar_files(tmp_path: Path) -> None:
-    graph = SimilarityGraph(threshold=0.8)
-    file1 = create_test_file(tmp_path, "test1.txt", "hello world")
-    file2 = create_test_file(tmp_path, "test2.txt", "hello world")
+def test_similarity_graph_similar_files(
+    similarity_graph: SimilarityGraph,
+    create_text_file: Callable[[str, str], TextFile],
+) -> None:
+    file1 = create_text_file("test1.txt", "hello world")
+    file2 = create_text_file("test2.txt", "hello world")
 
-    graph.add_files([file1, file2])
-    groups = graph.get_groups()
+    similarity_graph.add_files([file1, file2])
+    groups = similarity_graph.get_groups()
     assert len(groups) == 1
     assert len(groups[0].files) == 2
 
@@ -128,13 +131,15 @@ def test_similarity_graph_threshold(tmp_path: Path) -> None:
     assert len(low_threshold.get_groups()) == 1
 
 
-def test_similarity_graph_cache(tmp_path: Path) -> None:
+def test_similarity_graph_cache(
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
     """Test that signature caching works correctly."""
     graph = SimilarityGraph(threshold=0.8)
 
     # Create two identical files
-    file1 = create_test_file(tmp_path, "test1.txt", "hello world")
-    file2 = create_test_file(tmp_path, "test2.txt", "hello world")
+    file1 = TextFile.from_path(create_file_with_content("test1.txt", "hello world"))
+    file2 = TextFile.from_path(create_file_with_content("test2.txt", "hello world"))
 
     # Add files and check cache
     graph.add_files([file1, file2])
@@ -147,15 +152,16 @@ def test_similarity_graph_cache(tmp_path: Path) -> None:
     assert file2.path in graph._signature_cache
 
 
-def test_similarity_graph_batch_processing(tmp_path: Path) -> None:
+def test_similarity_graph_batch_processing(
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
     """Test processing files in batches."""
     graph = SimilarityGraph(threshold=0.8)
 
     # Create test files
     files = []
     for i in range(4):
-        path = tmp_path / f"test{i}.txt"
-        path.write_text("hello world")
+        path = create_file_with_content(f"test{i}.txt", "hello world")
         text_file = TextFile.from_path(path, compute_minhash=True)
         files.append(text_file)
 
@@ -167,8 +173,45 @@ def test_similarity_graph_batch_processing(tmp_path: Path) -> None:
     assert len(graph.get_groups()) == 1  # First group formed
 
     graph.add_files(second_batch)
-    assert len(graph.get_groups()) == 1  # All files in one group
-    assert len(graph.get_groups()[0].files) == 4  # All files included
+    groups = graph.get_groups()
+    assert len(groups) == 1  # All files in one group
+    assert len(groups[0].files) == 4  # All files included
+
+
+def test_similarity_graph_different_content(
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
+    """Test that different content creates separate groups."""
+    # Use a higher threshold to ensure different content creates separate groups
+    graph = SimilarityGraph(threshold=0.95)
+
+    # Create files with very different content
+    file1 = TextFile.from_path(create_file_with_content("test1.txt", "hello world"))
+    file2 = TextFile.from_path(create_file_with_content("test2.txt", "hello world"))
+    file3 = TextFile.from_path(
+        create_file_with_content(
+            "test3.txt",
+            "This is a completely different text with no similarity whatsoever",
+        )
+    )
+
+    graph.add_files([file1, file2, file3])
+    groups = graph.get_groups()
+
+    # Verify we have groups
+    assert len(groups) > 0
+
+    # Find files that are grouped together
+    similar_files = set()
+    for group in groups:
+        if len(group.files) > 1:
+            similar_files.update(group.files)
+
+    # Verify that file1 and file2 are grouped together
+    assert file1.path in similar_files
+    assert file2.path in similar_files
+    # Verify that file3 is not grouped with the others
+    assert file3.path not in similar_files
 
 
 def test_similarity_graph_keep_group(tmp_path: Path) -> None:

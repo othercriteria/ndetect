@@ -1,7 +1,7 @@
 """Tests for dry run functionality."""
 
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Callable, List
 from unittest.mock import patch
 
 from rich.console import Console
@@ -14,19 +14,14 @@ from ndetect.types import Action
 from ndetect.ui import InteractiveUI
 
 
-def test_dry_run_file_selection(tmp_path: Path) -> None:
-    """Test that dry run mode works correctly with file selection."""
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    file1.write_text("content1")
-    file2.write_text("content2")
+def test_dry_run_file_selection(
+    configurable_ui: InteractiveUI, create_test_files: List[Path]
+) -> None:
+    """Test that dry run mode works correctly."""
+    file1, file2 = create_test_files[:2]  # Get first two test files
 
-    console = Console(force_terminal=True)
-    retention_config = RetentionConfig(strategy="newest")
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
-    ui = InteractiveUI(
-        console=console, move_config=move_config, retention_config=retention_config
-    )
+    # Set dry run mode
+    configurable_ui.move_config.dry_run = True
 
     with (
         patch("ndetect.ui.select_keeper", return_value=file1),
@@ -34,7 +29,7 @@ def test_dry_run_file_selection(tmp_path: Path) -> None:
         patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.delete_files") as mock_delete,
     ):
-        result = ui.handle_delete([file1, file2])
+        result = configurable_ui.handle_delete([file1, file2])
 
         assert result is False
         mock_delete.assert_not_called()
@@ -42,16 +37,15 @@ def test_dry_run_file_selection(tmp_path: Path) -> None:
         assert file2.exists()
 
 
-def test_dry_run_process_group_continuation(tmp_path: Path) -> None:
+def test_dry_run_process_group_continuation(
+    tmp_path: Path, create_file_with_content: Callable[[str, str], Path]
+) -> None:
     """Test that process_group continues correctly in dry run mode."""
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    # Make files identical to ensure they form a group
-    file1.write_text("identical content")
-    file2.write_text("identical content")
+    file1 = create_file_with_content("test1.txt", "identical content")
+    file2 = create_file_with_content("test2.txt", "identical content")
 
     text_files = [
-        TextFile.from_path(file1, compute_minhash=True),  # Enable minhash computation
+        TextFile.from_path(file1, compute_minhash=True),
         TextFile.from_path(file2, compute_minhash=True),
     ]
 
@@ -69,10 +63,9 @@ def test_dry_run_process_group_continuation(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
-    # Mock all prompts and confirmations
     with (
-        patch.object(Prompt, "ask", return_value="n"),  # Don't override keeper
-        patch("ndetect.ui.Confirm.ask", return_value=True),  # Confirm all actions
+        patch.object(Prompt, "ask", return_value="n"),
+        patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.select_keeper", return_value=file1),
         patch.object(ui, "prompt_for_action", side_effect=[Action.DELETE, Action.NEXT]),
     ):
@@ -109,28 +102,27 @@ def test_dry_run_keeper_selection(tmp_path: Path) -> None:
         assert file2.exists()
 
 
-def test_dry_run_keeper_override(tmp_path: Path) -> None:
+def test_dry_run_keeper_override(
+    tmp_path: Path,
+    configurable_ui: InteractiveUI,
+    create_file_with_content: Callable[[str, str], Path],
+    mock_prompt_responses: Callable[[dict[str, Any]], Callable[..., Any]],
+) -> None:
     """Test that dry run mode works correctly when overriding keeper selection."""
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    file1.write_text("content1")
-    file2.write_text("content2")
+    # Create test files
+    file1 = create_file_with_content("test1.txt", "content1")
+    file2 = create_file_with_content("test2.txt", "content2")
 
-    console = Console(force_terminal=True)
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
-    ui = InteractiveUI(
-        console=console,
-        move_config=move_config,
-        retention_config=RetentionConfig(strategy="newest"),
-    )
+    # Configure UI for dry run mode
+    configurable_ui.move_config.dry_run = True
 
-    def mock_ask(prompt: str, choices: Optional[List[str]] = None) -> str:
-        if "Select keeper file number" in str(prompt):
-            assert choices == ["1", "2"], f"Expected choices [1,2], got {choices}"
-            return "2"
-        if "Do you want to select a different keeper?" in str(prompt):
-            return "y"
-        return ""
+    # Set up mock responses
+    responses = {
+        "Select keeper file number": "2",
+        "Do you want to select a different keeper?": "y",
+        "Are you sure?": True,
+    }
+    mock_ask = mock_prompt_responses(responses)
 
     with (
         patch("ndetect.ui.select_keeper", return_value=file1),
@@ -138,11 +130,13 @@ def test_dry_run_keeper_override(tmp_path: Path) -> None:
         patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.delete_files") as mock_delete,
     ):
-        result = ui.handle_delete([file1, file2])
+        # In dry run mode, handle_delete should return False
+        result = configurable_ui.handle_delete([file1, file2])
 
-        assert result is False
-        mock_delete.assert_not_called()
-        assert file1.exists()
+        # Verify dry run behavior
+        assert result is False  # Should be False in dry run mode
+        mock_delete.assert_not_called()  # No actual deletion in dry run
+        assert file1.exists()  # Files should still exist
         assert file2.exists()
 
 
