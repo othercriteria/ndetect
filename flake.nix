@@ -1,5 +1,5 @@
 {
-  description = "Development environment for ndetect (near-duplicate detection tool)";
+  description = "Python development environment";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -9,59 +9,40 @@
   outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-          config = { allowUnfree = true; };
-        };
-
-        pythonEnv = pkgs.python312.withPackages (ps: with ps; [
-          pip
-          setuptools
-          wheel
-          build
-          twine
-          # Development dependencies
-          pytest
-          ruff
-          mypy
-          types-setuptools
-          # Add mypy type stubs
-          typing-extensions
-          # Security scanning tools
-          bandit
-          safety
-        ]);
+        pkgs = nixpkgs.legacyPackages.${system};
       in
       {
         devShell = pkgs.mkShell {
-          name = "ndetect-dev-shell";
-
           buildInputs = with pkgs; [
-            pythonEnv
-            stdenv.cc.cc.lib
-            zlib
-            glib
-            pre-commit
-            nodePackages.markdownlint-cli
-          ];
+            # Core Python
+            python3
+            python3Packages.pip
+            python3Packages.virtualenv
 
-          nativeBuildInputs = with pkgs; [
+            # Development tools
+            python3Packages.mypy
+            python3Packages.black
+            python3Packages.ruff
+            python3Packages.pytest
+
+            # System dependencies
+            git
           ];
 
           shellHook = ''
-            # Create venv if it doesn't exist
+            # Create and activate venv if it doesn't exist
             if [ ! -d .venv ]; then
-              ${pythonEnv}/bin/python -m venv .venv
+              python -m venv .venv
             fi
-
-            # Activate venv
             source .venv/bin/activate
 
-            # Install package in development mode
+            # Install project dependencies
             pip install -e ".[dev]"
 
-            # Initialize pre-commit hooks
-            pre-commit install
+            # Setup git hooks if not already done
+            if [ -d .git ] && [ ! -f .git/hooks/pre-commit ]; then
+              pre-commit install
+            fi
 
             # Start mypy daemon if not already running
             if ! dmypy status >/dev/null 2>&1; then
@@ -78,16 +59,11 @@
             # Set PYTHONPATH
             export PYTHONPATH=$PYTHONPATH:$(pwd)
 
-            # Ensure library path includes stdenv cc lib
-            export LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH
-
-            echo "Development environment for ndetect is ready."
-            echo "Use 'dmypy check .' to run type checking"
-            echo "Use 'bandit -r ndetect/' to run security checks"
-            echo "Use 'safety scan' to check dependencies for vulnerabilities"
-
-            # Ensure markdownlint is available
-            echo "Markdown linting is available via 'markdownlint'"
+            # Print versions for key tools
+            echo "Python: $(python --version)"
+            echo "MyPy: $(mypy --version)"
+            echo "Black: $(black --version)"
+            echo "Ruff: $(ruff --version)"
           '';
         };
       });

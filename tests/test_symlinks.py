@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from typing import Callable
 
 import pytest
 
@@ -8,13 +9,14 @@ from ndetect.models import FileAnalyzerConfig
 from ndetect.symlinks import resolve_symlink
 
 
-def test_symlink_to_text_file(tmp_path: Path) -> None:
+def test_symlink_to_text_file(
+    tmp_path: Path, create_file_with_content: Callable[[str, str], Path]
+) -> None:
     """Test analyzing a symlink pointing to a valid text file."""
     analyzer = FileAnalyzer(FileAnalyzerConfig())
 
-    # Create original file
-    original = tmp_path / "original.txt"
-    original.write_text("Hello, World!")
+    # Create original file using fixture
+    original = create_file_with_content("original.txt", "Hello, World!")
 
     # Create symlink
     link = tmp_path / "link.txt"
@@ -26,12 +28,14 @@ def test_symlink_to_text_file(tmp_path: Path) -> None:
     assert result.has_signature()
 
 
-def test_symlink_to_binary_file(tmp_path: Path) -> None:
+def test_symlink_to_binary_file(
+    tmp_path: Path, create_file_with_content: Callable[[str, str], Path]
+) -> None:
     """Test analyzing a symlink pointing to a binary file."""
     analyzer = FileAnalyzer(FileAnalyzerConfig())
 
-    # Create binary file
-    binary = tmp_path / "binary.dat"
+    # Create binary file using fixture and write binary content
+    binary = create_file_with_content("binary.dat", "")
     binary.write_bytes(bytes([0x00, 0xFF] * 100))
 
     # Create symlink

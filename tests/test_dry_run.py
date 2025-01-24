@@ -73,20 +73,15 @@ def test_dry_run_process_group_continuation(
         assert action == Action.NEXT
 
 
-def test_dry_run_keeper_selection(tmp_path: Path) -> None:
+def test_dry_run_keeper_selection(
+    configurable_ui: InteractiveUI, create_file_with_content: Callable[[str, str], Path]
+) -> None:
     """Test that dry run mode works correctly with keeper selection."""
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    file1.write_text("content1")
-    file2.write_text("content2")
+    file1 = create_file_with_content("test1.txt", "content1")
+    file2 = create_file_with_content("test2.txt", "content2")
 
-    console = Console(force_terminal=True)
-    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
-    ui = InteractiveUI(
-        console=console,
-        move_config=move_config,
-        retention_config=RetentionConfig(strategy="newest"),
-    )
+    # Set dry run mode
+    configurable_ui.move_config.dry_run = True
 
     with (
         patch("ndetect.ui.select_keeper", return_value=file1),
@@ -94,7 +89,7 @@ def test_dry_run_keeper_selection(tmp_path: Path) -> None:
         patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.delete_files") as mock_delete,
     ):
-        result = ui.handle_delete([file1, file2])
+        result = configurable_ui.handle_delete([file1, file2])
 
         assert result is False
         mock_delete.assert_not_called()

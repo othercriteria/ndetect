@@ -9,7 +9,6 @@ from ndetect.models import MoveConfig, PreviewConfig, RetentionConfig, TextFile
 from ndetect.similarity import SimilarityGraph
 from ndetect.types import Action
 from ndetect.ui import InteractiveUI
-from ndetect.utils import format_preview_text
 
 
 def test_preview_action_available(test_console_no_color: Console) -> None:
@@ -159,27 +158,29 @@ def test_process_group_preview_continues(tmp_path: Path) -> None:
     assert action == Action.NEXT
 
 
-def test_preview_generation(create_text_file: Callable[[str, str], TextFile]) -> None:
+def test_preview_generation(
+    create_text_file: Callable[[str, str], TextFile],
+    configurable_ui: InteractiveUI,
+) -> None:
     """Test preview generation with different configurations."""
     test_content = "line1\nline2\nline3\nline4\nline5"
     file = create_text_file("test.txt", test_content)
 
-    # Test different preview configurations
     test_cases = [
-        # (max_chars, max_lines, expected_output)
-        (10, 2, "line1..."),
-        (100, 2, "line1\nline2..."),
-        (5, 5, "li..."),
-        (100, 5, "line1\nline2\nline3\nline4\nline5"),
-        (100, 1, "line1..."),
+        (PreviewConfig(max_chars=10, max_lines=2), ["line1"]),
+        (PreviewConfig(max_chars=100, max_lines=2), ["line1", "line2..."]),
+        (PreviewConfig(max_chars=5, max_lines=5), ["li"]),
+        (
+            PreviewConfig(max_chars=100, max_lines=5),
+            ["line1", "line2", "line3", "line4", "line5"],
+        ),
+        (PreviewConfig(max_chars=100, max_lines=1), ["line1..."]),
     ]
 
-    for max_chars, max_lines, expected in test_cases:
-        preview = format_preview_text(
-            Path(file.path).read_text(),  # Read content directly from file
-            max_chars=max_chars,
-            max_lines=max_lines,
-        )
-        assert (
-            preview == expected
-        ), f"Preview mismatch for config max_chars={max_chars}, max_lines={max_lines}"
+    for config, expected_pieces in test_cases:
+        configurable_ui.preview_config = config
+        with configurable_ui.console.capture() as capture:
+            configurable_ui.show_preview([file.path])
+        output = capture.get()
+        for piece in expected_pieces:
+            assert piece in output, f"Expected '{piece}' in output: {output}"

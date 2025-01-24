@@ -164,7 +164,7 @@ class InteractiveUI:
         self.logger.info_with_fields(
             "User confirmation requested", operation="confirm", prompt_message=message
         )
-        return Confirm.ask(message)
+        return bool(Confirm.ask(message))
 
     def add_pending_move(self, move: MoveOperation) -> None:
         """Add a move operation to the pending list."""

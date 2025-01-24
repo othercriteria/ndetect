@@ -41,11 +41,13 @@ def test_select_keeper_priority_paths(
     tmp_path: Path,
 ) -> None:
     """Test priority paths in keeper selection."""
+    # Create directory structure
     important = tmp_path / "important"
     other = tmp_path / "other"
     important.mkdir()
     other.mkdir()
 
+    # Create test files using fixture
     file1 = create_file_with_content("important/test1.txt", "content")
     file2 = create_file_with_content("other/test2.txt", "content")
 

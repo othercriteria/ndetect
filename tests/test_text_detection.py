@@ -3,7 +3,7 @@ import os
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, List
+from typing import Any, Callable, List
 from unittest.mock import Mock, create_autospec, patch
 
 import pytest
@@ -14,17 +14,19 @@ from ndetect.models import FileAnalyzerConfig, TextFile
 from ndetect.text_detection import cleanup_resources, scan_paths
 
 
-def test_file_analyzer_with_invalid_extension(tmp_path: Path) -> None:
+def test_file_analyzer_with_invalid_extension(
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
     analyzer = FileAnalyzer(FileAnalyzerConfig())
-    file_path = tmp_path / "test.bin"
-    file_path.write_text("Hello, World!")
+    file_path = create_file_with_content("test.bin", "Hello, World!")
     assert analyzer.analyze_file(file_path) is None
 
 
-def test_file_analyzer_with_valid_text(tmp_path: Path) -> None:
+def test_file_analyzer_with_valid_text(
+    create_file_with_content: Callable[[str, str], Path],
+) -> None:
     analyzer = FileAnalyzer(FileAnalyzerConfig())
-    file_path = tmp_path / "test.txt"
-    file_path.write_text("Hello, World!")
+    file_path = create_file_with_content("test.txt", "Hello, World!")
     result = analyzer.analyze_file(file_path)
     assert result is not None
 
@@ -422,26 +424,24 @@ def test_scan_paths_cleanup_after_exception(tmp_path: Path) -> None:
     assert mock_logger.error_with_fields.call_count > 0, "Expected error logs"
 
 
-def test_scan_paths_sequential_processing(tmp_path: Path) -> None:
-    """Test sequential processing (less than 10 files)."""
-    for i in range(5):
-        test_file = tmp_path / f"test{i}.txt"
-        test_file.write_text(f"test content {i}")
+def test_scan_paths_sequential_processing(
+    create_test_files: List[Path],
+) -> None:
+    """Test sequential processing (small number of files)."""
+    files = create_test_files  # Use all test files
 
-    mock_logger = Mock()
     cleanup_called = False
 
     def mock_cleanup(*args: Any) -> None:
         nonlocal cleanup_called
         cleanup_called = True
 
-    with patch("ndetect.text_detection.logger", mock_logger):
-        with patch("ndetect.text_detection.cleanup_resources", mock_cleanup):
-            result = scan_paths([str(tmp_path)])
+    with patch("ndetect.text_detection.cleanup_resources", mock_cleanup):
+        result = scan_paths([str(files[0].parent)])
 
-            assert not cleanup_called
-            assert len(result) == 5
-            assert all(isinstance(f, TextFile) for f in result)
+        assert not cleanup_called
+        assert len(result) == 3  # Updated to match actual number of files
+        assert all(isinstance(f, TextFile) for f in result)
 
 
 def test_scan_paths_with_worker_limit(tmp_path: Path) -> None:
