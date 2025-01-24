@@ -1,8 +1,26 @@
 # `ndetect`: Near-Duplicate Detection using MinHash
 
-![ndetect](./docs/ndetect.webp)
+> ⚠️ This project is an experiment in AI-assisted software development.
+>
+> The idea for the tool was suggested by `-4o` as:
+>
+> > Data Deduplication with LSH:
+> >
+> > - Implement a near-duplicate detection tool using locality-sensitive hashing (LSH)
+> >   for a collection of text documents.
+> > - Add visualization for clusters of similar documents.
+>
+> I picked out this idea from roughly a dozen others, and had `-4o` flesh it out into
+> a detailed spec.
+>
+> Implementation was done entirely in Cursor, using the `claude-3.5-sonnet` model,
+> with a dash of `o1-mini`.
+>
+> I personally wrote low double-digit lines of code, documentation included! (This note included!)
+>
+> Treat the logo below as a visual hint of what to expect. (And please disregard the "TM"!)
 
-(AI slop logo; disregard the "TM"!)
+![ndetect](./docs/ndetect.webp)
 
 ## Quickstart
 
