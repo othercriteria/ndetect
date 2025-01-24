@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
 from ndetect.models import TextFile
 
@@ -30,3 +31,20 @@ def test_textfile_str_representation(tmp_path: Path) -> None:
     str_repr = str(text_file)
     assert str(test_file) in str_repr
     assert "bytes" in str_repr
+
+
+def test_compute_signature_uses_cached_content(tmp_path: Path) -> None:
+    """Test that compute_signature uses cached content for small files."""
+    test_file = tmp_path / "test.txt"
+    content = "Hello, World!"
+    test_file.write_text(content)
+
+    text_file = TextFile.from_path(test_file, compute_minhash=False)
+
+    # Access content to cache it
+    _ = text_file.content
+
+    # Mock read_chunk to verify it's not called
+    with patch.object(text_file, "read_chunk") as mock_read:
+        text_file.compute_signature()
+        mock_read.assert_not_called()

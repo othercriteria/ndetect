@@ -158,6 +158,17 @@ class TextFile:
         shingle_size: int = 5,
     ) -> MinHash:
         """Compute MinHash signature for this file."""
+        # For small files, use cached content if available
+        if (
+            self._content is not None and self.size <= 8 * 1024
+        ):  # Same threshold as is_valid_text
+            return compute_minhash_from_chunks(
+                [self._content.encode("utf-8")],
+                num_perm=num_perm,
+                shingle_size=shingle_size,
+            )
+
+        # Otherwise read in chunks as before
         chunks = list(self.read_chunk())
         return compute_minhash_from_chunks(
             chunks, num_perm=num_perm, shingle_size=shingle_size
