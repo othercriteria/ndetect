@@ -4,11 +4,12 @@ from argparse import Namespace
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import List, Optional, Set
+from typing import Generator, List, Optional, Set
 
 from datasketch import MinHash
 
-from ndetect.minhash import compute_signature
+from ndetect.exceptions import FileOperationError
+from ndetect.signatures import compute_minhash_from_chunks
 
 
 @dataclass
@@ -20,6 +21,7 @@ class TextFile:
     modified_time: datetime
     created_time: datetime
     signature: Optional[MinHash] = None
+    _content: Optional[str] = None
 
     @classmethod
     def from_path(
@@ -39,8 +41,8 @@ class TextFile:
         )
 
         if compute_minhash:
-            instance.signature = compute_signature(
-                path, num_perm=num_perm, shingle_size=shingle_size
+            instance.signature = instance.compute_signature(
+                num_perm=num_perm, shingle_size=shingle_size
             )
 
         return instance
@@ -64,9 +66,102 @@ class TextFile:
         """Check if the file has a MinHash signature."""
         return self.signature is not None
 
+    def read_chunk(self, chunk_size: int = 8 * 1024) -> Generator[bytes, None, None]:
+        """
+        Read file in chunks to avoid memory issues.
+
+        Args:
+            chunk_size: Size of chunks to read
+
+        Raises:
+            FileOperationError: If file cannot be read
+        """
+        try:
+            with self.path.open("rb") as f:
+                while chunk := f.read(chunk_size):
+                    yield chunk
+        except OSError as e:
+            raise FileOperationError(
+                f"Failed to read file: {e}", str(self.path), "read"
+            ) from e
+
+    def is_valid_text(self, min_printable_ratio: float = 0.8) -> bool:
+        """
+        Check if file content appears to be valid text.
+
+        Args:
+            min_printable_ratio: Minimum ratio of printable characters (default 0.8)
+
+        Returns:
+            bool: True if content appears to be text
+        """
+        try:
+            # Empty files are considered valid text
+            if self.size == 0:
+                return True
+
+            # If we already have content loaded and it's small, use it
+            if self._content is not None and self.size <= 8 * 1024:
+                content = self._content
+            else:
+                try:
+                    chunk = next(self.read_chunk())
+                    content = chunk.decode("utf-8")
+                except UnicodeDecodeError:
+                    return False
+                except StopIteration:  # Handle empty files created after size check
+                    return True
+
+            if not content:  # Handle empty content
+                return True
+
+            printable_chars = sum(1 for c in content if c.isprintable() or c.isspace())
+            return printable_chars / len(content) >= min_printable_ratio
+
+        except OSError:
+            return False
+
+    @property
+    def content(self, max_size: int = 1024 * 1024) -> str:
+        """Get file content, limited to max_size bytes."""
+        if self.size > max_size:
+            raise FileOperationError(
+                f"File too large ({self.size:,} bytes) for preview (max {max_size:,})",
+                str(self.path),
+                "preview",
+            )
+
+        if self._content is None:
+            try:
+                chunks = []
+                for chunk in self.read_chunk():
+                    chunks.append(chunk.decode("utf-8", errors="replace"))
+                self._content = "".join(chunks)
+            except Exception as e:
+                raise FileOperationError(
+                    f"Failed to read file: {e}", str(self.path), "preview"
+                ) from e
+
+        return self._content
+
+    def invalidate_content(self) -> None:
+        """Clear cached content."""
+        self._content = None
+
     def __str__(self) -> str:
         """Return a human-readable string representation."""
         return f"{self.path} ({self.size} bytes, modified {self.modified_time})"
+
+    def compute_signature(
+        self,
+        num_perm: int = 128,
+        shingle_size: int = 5,
+    ) -> MinHash:
+        """Compute MinHash signature for this file."""
+        chunks = list(self.read_chunk())
+        return compute_minhash_from_chunks(
+            chunks, num_perm=num_perm, shingle_size=shingle_size
+        )
 
 
 @dataclass

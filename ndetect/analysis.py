@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 
+from .exceptions import FileOperationError
 from .models import FileAnalyzerConfig, TextFile
 from .symlinks import SymlinkConfig, SymlinkHandler
 
@@ -66,22 +67,9 @@ class FileAnalyzer:
     def _is_valid_text_content(self, file_path: Path) -> bool:
         """Check if file content is valid text."""
         try:
-            with file_path.open("rb") as f:
-                raw_bytes = f.read(8 * 1024)  # Read first 8KB
-
-            try:
-                content = raw_bytes.decode("utf-8")
-            except UnicodeDecodeError:
-                return False
-
-            # For empty files, consider them valid text files
-            if not content:
-                return True
-
-            printable_chars = sum(1 for c in content if c.isprintable() or c.isspace())
-            ratio = printable_chars / len(content)
-
-            return ratio >= self.config.min_printable_ratio
-
-        except OSError:
+            text_file = TextFile.from_path(file_path, compute_minhash=False)
+            return text_file.is_valid_text(
+                min_printable_ratio=self.config.min_printable_ratio
+            )
+        except (OSError, FileOperationError):
             return False
