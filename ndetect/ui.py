@@ -349,9 +349,37 @@ class InteractiveUI:
         )
         self.console.print(panel)
 
+    def _display_keeper_selection_table(self, files: List[Path]) -> None:
+        """Display a numbered table of files for keeper selection."""
+        table = Table(show_header=True, header_style="bold magenta")
+        table.add_column("#", justify="right", style="dim")
+        table.add_column("File", style="cyan")
+        table.add_column("Size", justify="right", style="green")
+        table.add_column("Modified", justify="right", style="yellow")
+
+        for idx, file in enumerate(files, 1):
+            try:
+                stat = file.stat()
+                table.add_row(
+                    str(idx),
+                    str(file),
+                    f"{stat.st_size:,} bytes",
+                    datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+                )
+            except OSError as e:
+                self.logger.error_with_fields(
+                    f"Failed to get file stats: {e}",
+                    operation="display",
+                    file=str(file),
+                    error=str(e),
+                )
+                table.add_row(str(idx), str(file), "ERROR", "ERROR")
+
+        self.console.print(table)
+
     def _handle_keeper_selection(self, group: SimilarGroup) -> Optional[Path]:
         """Handle user input for keeper selection and return selected keeper."""
-        self.display_files(group.files)  # Show numbered list of files
+        self._display_keeper_selection_table(group.files)  # Use the new table display
         keeper_input = Prompt.ask(
             "\nSelect keeper file number",
             choices=[str(i) for i in range(1, len(group.files) + 1)],
@@ -376,15 +404,6 @@ class InteractiveUI:
                 keeper = new_keeper
 
         return keeper
-
-    def _display_keeper_selection_table(self, files: List[Path]) -> None:
-        """Display a numbered table of files for keeper selection."""
-        table = Table(show_header=True)
-        table.add_column("#")
-        table.add_column("File")
-        for idx, file in enumerate(files, 1):
-            table.add_row(str(idx), str(file))
-        self.console.print(table)
 
     def _get_files_to_process(self, group: SimilarGroup) -> List[Path]:
         """Get list of files to process, excluding the keeper."""
