@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.4.0] - 2024-03-21
+## [0.4.0] - 2025-01-24
 
 ### Added
 
@@ -34,8 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Group recalculation after file operations
 - Symlink cycle detection and resolution
 - Permission handling in file operations
+- Various UI bugs
 
-## [0.3.0] - 2024-03-21
+## [0.3.0] - 2025-01-16
 
 ### Added
 
@@ -60,7 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Disk space verification before batch operations
 - Memory management during large file operations
 
-## [0.2.0] - 2024-03-21
+## [0.2.0] - 2025-01-16
 
 ### Added
 
