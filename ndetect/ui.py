@@ -46,6 +46,7 @@ class InteractiveUI:
         self.preview_config = preview_config or PreviewConfig()
         self.logger = logger or get_logger()
         self.pending_moves: List[MoveOperation] = []
+        self._next_group_id = 1
 
     def show_scan_progress(self, paths: List[str]) -> None:
         """Show progress while scanning files."""
@@ -288,22 +289,6 @@ class InteractiveUI:
                 )
                 self.show_error("Preview failed", f"An unexpected error occurred: {e}")
 
-    def create_moves(self, files: List[Path], *, group_id: int) -> List[MoveOperation]:
-        """Create move operations for selected files."""
-        self.logger.info_with_fields(
-            "Creating move operations",
-            operation="create_moves",
-            group_id=group_id,
-            files=[str(f) for f in files],
-        )
-        moves = prepare_moves(
-            files=files,
-            holding_dir=self.move_config.holding_dir / f"group_{group_id}",
-            preserve_structure=self.move_config.preserve_structure,
-            group_id=group_id,
-        )
-        return moves
-
     def display_move_preview(self, moves: List[MoveOperation]) -> None:
         """Display preview of move operations."""
         self.logger.info_with_fields(
@@ -508,24 +493,35 @@ class InteractiveUI:
 
         return False
 
-    def handle_move(self, files: List[Path]) -> bool:
-        """Handle moving of files."""
-        if not files:
+    def _create_group_from_files(self, files: List[Path]) -> SimilarGroup:
+        """Create a SimilarGroup with a deterministic ID from a list of files."""
+        files = sorted(files)  # Sort for consistency
+        group_id = hash(tuple(str(f) for f in files))
+        return SimilarGroup(
+            id=group_id,
+            files=files,
+            similarity=1.0,
+        )
+
+    def handle_move(self, group: SimilarGroup) -> bool:
+        """Handle moving of files from a similar group."""
+        if not group.files:
             return False
 
-        group = SimilarGroup(files=files, similarity=1.0, id=1)
-        group.keeper = select_keeper(files, self.retention_config)
+        group.keeper = select_keeper(group.files, self.retention_config)
         self.console.print(f"\nDefault keeper selected: \n{group.keeper}")
 
         if Confirm.ask("Do you want to select a different keeper?"):
             new_keeper = self._handle_keeper_selection(group)
             if new_keeper:
                 group.keeper = new_keeper
+                self.console.print(f"\nNew keeper selected: \n{new_keeper}")
 
         moves = prepare_moves(
-            files=files,
-            holding_dir=self.move_config.holding_dir,
+            files=group.files,
+            holding_dir=self.move_config.holding_dir / f"group_{group.id}",
             preserve_structure=self.move_config.preserve_structure,
+            group_id=group.id,
             retention_config=self.retention_config,
             keeper=group.keeper,
         )
@@ -603,3 +599,22 @@ class InteractiveUI:
                 table.add_row(str(i), str(file), "ERROR", "ERROR")
 
         self.console.print(table)
+
+    def create_moves(self, files: List[Path], *, group_id: int) -> List[MoveOperation]:
+        """Create move operations for selected files."""
+        # Create a temporary group for the files
+        group = SimilarGroup(
+            id=group_id,
+            files=files,
+            similarity=1.0,
+        )
+        group.keeper = select_keeper(files, self.retention_config)
+
+        return prepare_moves(
+            files=group.files,
+            holding_dir=self.move_config.holding_dir / f"group_{group_id}",
+            preserve_structure=self.move_config.preserve_structure,
+            group_id=group.id,
+            retention_config=self.retention_config,
+            keeper=group.keeper,
+        )

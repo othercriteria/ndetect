@@ -10,7 +10,7 @@ from rich.prompt import Prompt
 from ndetect.cli import process_group
 from ndetect.models import MoveConfig, RetentionConfig, TextFile
 from ndetect.similarity import SimilarityGraph
-from ndetect.types import Action
+from ndetect.types import Action, SimilarGroup
 from ndetect.ui import InteractiveUI
 
 
@@ -150,15 +150,50 @@ def test_dry_run_keeper_selection_move_operation(tmp_path: Path) -> None:
         retention_config=RetentionConfig(strategy="newest"),
     )
 
+    group = ui._create_group_from_files([file1, file2])
+
     with (
         patch("ndetect.ui.select_keeper", return_value=file1),
         patch.object(Prompt, "ask", return_value=""),
         patch("ndetect.ui.Confirm.ask", return_value=True),
         patch("ndetect.ui.execute_moves") as mock_execute,
     ):
-        result = ui.handle_move([file1, file2])
+        result = ui.handle_move(group)
 
         assert result is False
         mock_execute.assert_not_called()
         assert file1.exists()
         assert file2.exists()
+
+
+def test_dry_run_move_operation(tmp_path: Path) -> None:
+    """Test that move operations work correctly in dry run mode."""
+    file1 = tmp_path / "file1.txt"
+    file2 = tmp_path / "file2.txt"
+    file1.write_text("content1")
+    file2.write_text("content2")
+
+    console = Console(force_terminal=True)
+    move_config = MoveConfig(holding_dir=tmp_path / "duplicates", dry_run=True)
+    ui = InteractiveUI(
+        console=console,
+        move_config=move_config,
+        retention_config=RetentionConfig(strategy="newest"),
+    )
+
+    # Create a group
+    group = SimilarGroup(
+        id=1,
+        files=[file1, file2],
+        similarity=1.0,
+    )
+
+    with (
+        patch("ndetect.ui.Confirm.ask", return_value=True),
+        patch("ndetect.ui.execute_moves") as mock_execute,
+        patch.object(Prompt, "ask", return_value="n"),  # Don't select different keeper
+    ):
+        result = ui.handle_move(group)
+
+        assert result is False  # Should return False in dry run mode
+        mock_execute.assert_not_called()  # Should not execute moves in dry run mode

@@ -11,6 +11,7 @@ from rich.prompt import Prompt
 
 from ndetect.models import MoveConfig, RetentionConfig
 from ndetect.operations import MoveOperation
+from ndetect.types import SimilarGroup
 from ndetect.ui import InteractiveUI
 
 
@@ -191,6 +192,13 @@ def test_handle_move_keeper_override(tmp_path: Path) -> None:
         console=console, move_config=move_config, retention_config=retention_config
     )
 
+    # Create a group
+    group = SimilarGroup(
+        id=1,
+        files=[file1, file2, file3],
+        similarity=1.0,
+    )
+
     # Track which prompt is being answered
     prompt_count = 0
 
@@ -198,17 +206,10 @@ def test_handle_move_keeper_override(tmp_path: Path) -> None:
         nonlocal prompt_count
         prompt_count += 1
 
-        # First prompt: "Do you want to select a different keeper?"
-        if prompt_count == 1:
+        if "Select keeper file number" in str(prompt):
+            return "2"  # Select file2 as keeper
+        if "Do you want to select a different keeper?" in str(prompt):
             return "y"
-        # Second prompt: "Select keeper file number"
-        elif prompt_count == 2:
-            assert choices == [
-                "1",
-                "2",
-                "3",
-            ], f"Expected choices [1,2,3], got {choices}"
-            return "2"
         return ""
 
     with (
@@ -231,7 +232,7 @@ def test_handle_move_keeper_override(tmp_path: Path) -> None:
             ],
         ),
     ):
-        result = ui.handle_move([file1, file2, file3])
+        result = ui.handle_move(group)
 
         assert result is True
         mock_execute.assert_called_once()

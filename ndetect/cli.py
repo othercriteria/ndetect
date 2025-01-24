@@ -313,10 +313,8 @@ def process_group(
                 similarities = graph.get_group_similarities(group.files)
                 ui.show_similarities(group.files, similarities)
             case Action.MOVE:
-                selected = ui.select_files(group.files, "Select files to move")
-                if selected:
-                    moves = ui.create_moves(selected, group_id=group.id)
-                    ui.pending_moves.extend(moves)
+                if ui.handle_move(group):
+                    graph.remove_files([f for f in group.files if f != group.keeper])
                     return Action.NEXT
             case Action.NEXT:
                 return action
