@@ -21,9 +21,9 @@
 
             # Development tools
             python3Packages.mypy
-            python3Packages.black
             python3Packages.ruff
             python3Packages.pytest
+            nodePackages.markdownlint-cli
 
             # System dependencies
             git
@@ -66,8 +66,8 @@
             # Print versions for key tools
             echo "Python: $(python --version)"
             echo "MyPy: $(mypy --version)"
-            echo "Black: $(black --version)"
             echo "Ruff: $(ruff --version)"
+            echo "Markdownlint: $(markdownlint --version)"
           '';
         };
       });
