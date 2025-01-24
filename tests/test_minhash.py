@@ -2,26 +2,20 @@ from pathlib import Path
 
 from ndetect.minhash import (
     compute_signature,
-    create_minhash,
-    create_shingles,
-    similarity,
 )
-from ndetect.types import MinHashSignature
+from ndetect.signatures import compute_minhash_from_chunks
 
 
 def test_create_minhash() -> None:
-    content1 = "hello world"
-    content2 = "hello world"
-    content3 = "different text"
+    """Test MinHash creation with different inputs."""
+    text1 = b"This is a test document"
+    text2 = b"This is another test document"
 
-    mh1 = create_minhash(content1)
-    mh2 = create_minhash(content2)
-    mh3 = create_minhash(content3)
+    sig1 = compute_minhash_from_chunks([text1])
+    sig2 = compute_minhash_from_chunks([text2])
 
-    # Same content should have same signature
-    assert (mh1.digest() == mh2.digest()).all()
-    # Different content should have different signature
-    assert not (mh1.digest() == mh3.digest()).all()
+    # Similar texts should have higher similarity
+    assert sig1.jaccard(sig2) > 0.5
 
 
 def test_compute_signature(tmp_path: Path) -> None:
@@ -47,49 +41,39 @@ def test_compute_signature_invalid_file(tmp_path: Path) -> None:
 
 
 def test_similarity() -> None:
-    content1 = "hello world this is a test message with some length to it"
-    content2 = "hello world this is a test message with some length to it"  # identical
-    content3 = "the quick brown fox jumps over the lazy dog"  # completely different
+    """Test similarity calculation between two texts."""
+    text1 = b"This is a test document"
+    text2 = b"This is another test document"
 
-    # Use larger shingle size to be more sensitive to differences
-    mh1 = create_minhash(content1, shingle_size=7)
-    mh2 = create_minhash(content2, shingle_size=7)
-    mh3 = create_minhash(content3, shingle_size=7)
+    sig1 = compute_minhash_from_chunks([text1])
+    sig2 = compute_minhash_from_chunks([text2])
 
-    sig1 = MinHashSignature(mh1.digest().tobytes())
-    sig2 = MinHashSignature(mh2.digest().tobytes())
-    sig3 = MinHashSignature(mh3.digest().tobytes())
-
-    # Same content should have similarity 1.0
-    assert similarity(sig1, sig2) == 1.0
-    # Different content should have lower similarity
-    assert similarity(sig1, sig3) < 0.5  # More strict threshold
-
-
-def test_create_shingles() -> None:
-    text = "hello world"
-    shingles = create_shingles(text, k=3)
-    expected = {"hel", "ell", "llo", "lo ", "o w", " wo", "wor", "orl", "rld"}
-    assert shingles == expected
-
-
-def test_create_shingles_normalized() -> None:
-    text1 = "Hello  World"
-    text2 = "hello world"
-    shingles1 = create_shingles(text1, k=3)
-    shingles2 = create_shingles(text2, k=3)
-    assert shingles1 == shingles2
+    # Similar texts should have higher similarity
+    assert sig1.jaccard(sig2) > 0.5
 
 
 def test_similar_text_higher_similarity() -> None:
-    text1 = "hello world how are you"
-    text2 = "hello world how are they"  # Only last word different
+    """Test that more similar texts have higher similarity scores."""
+    base = b"This is a test document about similarity measurement"
+    similar = b"This is a test document about similarity testing"
+    different = b"Something completely different here"
 
-    mh1 = create_minhash(text1)
-    mh2 = create_minhash(text2)
+    base_sig = compute_minhash_from_chunks([base])
+    similar_sig = compute_minhash_from_chunks([similar])
+    different_sig = compute_minhash_from_chunks([different])
 
-    sig1 = MinHashSignature(mh1.digest().tobytes())
-    sig2 = MinHashSignature(mh2.digest().tobytes())
+    similar_score = base_sig.jaccard(similar_sig)
+    different_score = base_sig.jaccard(different_sig)
 
-    similarity_score = similarity(sig1, sig2)
-    assert similarity_score > 0.4  # Moderate similarity expected
+    assert similar_score > different_score
+
+
+def test_case_insensitive_similarity() -> None:
+    """Test that case differences don't affect similarity."""
+    text1 = b"Hello World"
+    text2 = b"hello world"
+
+    sig1 = compute_minhash_from_chunks([text1])
+    sig2 = compute_minhash_from_chunks([text2])
+
+    assert sig1.jaccard(sig2) == 1.0

@@ -1,8 +1,56 @@
 # `ndetect`: Near-Duplicate Detection using MinHash
 
+> ⚠️ This project is an experiment in AI-assisted software development.
+>
+> The idea for the tool was suggested by `-4o` as:
+>
+> > Data Deduplication with LSH:
+> >
+> > - Implement a near-duplicate detection tool using locality-sensitive hashing (LSH)
+> >   for a collection of text documents.
+> > - Add visualization for clusters of similar documents.
+>
+> I picked out this idea from roughly a dozen others, and had `-4o` flesh it out into
+> a detailed spec.
+>
+> Implementation was done entirely in Cursor, using the `claude-3.5-sonnet` model,
+> with a dash of `o1-mini`.
+>
+> I personally wrote low double-digit lines of code, documentation included! (This note included!)
+>
+> Treat the logo below as a visual hint of what to expect. (And please disregard the "TM"!)
+
 ![ndetect](./docs/ndetect.webp)
 
-(AI slop logo; disregard the "TM"!)
+## Quickstart
+
+### Install
+
+#### Nix/flakes/direnv
+
+```bash
+git clone git@github.com:othercriteria/ndetect.git
+cd ndetect
+direnv allow
+ndetect .
+```
+
+#### System Python (virtualenv)
+
+```bash
+git clone git@github.com:othercriteria/ndetect.git
+cd ndetect
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+ndetect .  # If installation was successful
+# OR
+python -m ndetect .  # Always works as long as package is installed
+```
+
+### Usage
+
+There are enough text files in the repo to get started using the interactive mode.
 
 ## Core Behavior
 
@@ -62,29 +110,59 @@ The tool operates in two primary modes:
      ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
      ┃ # ┃ File                                  ┃         Size ┃         Modified ┃
      ┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
-     │ 1 │ ../numpy-2.2.1.dist-info/LICENSE.txt  │ 47,755 bytes │ 2025-01-13 13:57 │
-     │ 2 │ ../scipy-1.15.1.dist-info/LICENSE.txt │ 46,845 bytes │ 2025-01-13 13:57 │
+     │ 1 │ path/to/file1.txt                     │ 47,755 bytes │ 2025-01-13 13:57 │
+     │ 2 │ path/to/file2.txt                     │ 46,845 bytes │ 2025-01-13 13:57 │
      └───┴───────────────────────────────────────┴──────────────┴──────────────────┘
      ```
 
    - For groups with 2 files: Shows "~XX.XX% similar"
    - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
 
-1. **Available Actions**:
-   - **[k] Keep all**: No changes are made to this group, and it won't appear again
-   - **[d] Delete duplicates**: Select files to delete
-   - **[m] Move duplicates**: Select files to move (not yet implemented)
-   - **[i] Show details**: Display detailed information including:
-     - File metadata (size, timestamps, permissions)
-     - Pairwise similarity scores
-     - Content previews
-   - **[q] Quit**: Exit the program
+1. **Default Keeper Selection**:
+   - A default keeper file is automatically selected based on retention criteria
+   - Users can choose to accept or change the default keeper when performing actions
+   - When prompted "Do you want to select a different keeper? [y/n]:", users can:
+     - Accept the default (n)
+     - Choose a different file by number (y)
 
-1. **Group Management**:
-   - Groups are presented in order of highest similarity first
-   - Each group remains active until explicitly handled (keep, delete, or move)
-   - After any file operation, groups are automatically recalculated
-   - Detailed information can be viewed multiple times while working with a group
+1. **Available Actions**:
+   - **[n] Next group**: Skip to the next group without making changes
+   - **[d] Delete duplicates**: Delete selected files, keeping the chosen keeper
+   - **[m] Move duplicates**: Move selected files to a holding directory
+   - **[p] Preview**: Display file contents with configurable limits:
+
+     ```console
+     ╭─── path/to/file1.txt ────╮
+     │ First line of content    │
+     │ Second line of content   │
+     │ ...                      │
+     ╰── Size: 47,755 bytes ────╯
+     ```
+
+   - **[s] Show similarities**: Display pairwise similarity scores:
+
+     ```console
+     ╭─── Pairwise Similarities ────╮
+     │ File 1    File 2    Similar │
+     │ file1.txt file2.txt  97.6%  │
+     │ file1.txt file3.txt  89.0%  │
+     ╰────────────────────────────╯
+     ```
+
+   - **[q] Quit**: Exit the program
+   - **[h] Help**: Show available commands
+
+1. **Dry Run Mode**:
+   - When using `--dry-run`, actions are simulated:
+     - Shows "Dry run: Would move these files:" or similar messages
+     - No actual file operations are performed
+   - Useful for previewing what actions would be taken
+
+1. **Pending Operations**:
+   - Move operations are queued until explicitly confirmed
+   - Before exiting or after processing groups, prompts:
+     "Execute pending moves? [y/n]:"
+   - Reports results: "Successfully moved X files"
 
 ## User Flow
 
@@ -136,6 +214,9 @@ The tool operates in two primary modes:
 ## Key Features
 
 ### 1. MinHash-Based Similarity
+
+For technical background, see the [MinHash paper](http://www.cohenwang.com/edith/Surveys/minhash.pdf)
+and the Python implemetation in the [datasketch library](https://github.com/ekzhu/datasketch).
 
 - Efficiently calculates content similarity for large collections of text documents.
 - Groups duplicates using a **similarity graph**:
@@ -199,6 +280,8 @@ ndetect --mode non-interactive /path/to/files
 - `--threshold [float]`: Minimum similarity threshold (default: 0.85)
 - `--holding-dir [path]`: Directory for moved duplicates (default: ./holding)
 - `--dry-run`: Preview actions without making changes
+- `--verbose`: Enable verbose logging
+- `--log-file [path]`: Path to log file (if not specified, only logs to console)
 
 ### Examples
 
@@ -206,14 +289,17 @@ ndetect --mode non-interactive /path/to/files
 # Find duplicates with higher similarity threshold
 ndetect --threshold 0.95 /path/to/files
 
-# Move duplicates to custom directory
-ndetect --holding-dir /tmp/duplicates /path/to/files
+# Move duplicates to custom directory with logging
+ndetect --holding-dir /tmp/duplicates --log-file ndetect.log /path/to/files
 
-# Non-interactive mode with logging
+# Non-interactive mode with custom retention strategy
 ndetect --mode non-interactive \
-        --log /var/log/ndetect.log \
+        --retention newest \
         --holding-dir /archive \
         /path/to/files
+
+# Preview operations without making changes
+ndetect --dry-run /path/to/files
 ```
 
 ### Text Processing Options
@@ -221,22 +307,64 @@ ndetect --mode non-interactive \
 - `--min-printable-ratio [float]`: Minimum ratio of printable characters (default: 0.8)
 - `--num-perm [int]`: Number of MinHash permutations (default: 128)
 - `--shingle-size [int]`: Size of text shingles for comparison (default: 5)
+- `--include-empty`: Include empty (zero-byte) files in analysis (default: skip empty files)
+- `--max-workers [int]`: Maximum number of worker processes for parallel scanning
+  (default: CPU count)
 
-## Future Considerations (Post-MVP)
+### File Selection Options
 
-### Error Handling & Operations
+- `--follow-symlinks`: Follow symbolic links when scanning (default)
+- `--no-follow-symlinks`: Do not follow symbolic links when scanning
+- `--max-symlink-depth [int]`: Maximum depth when following symbolic links (default: 10)
+- `--base-dir [path]`: Restrict symlink resolution to specified directory
 
-- Enhanced error recovery mechanisms
-- Operation rollback capabilities
-- Advanced report generation
-- Detailed error logging with analytics
+### Symlink Handling
 
-### Feature Enhancements
+The tool implements robust and secure symlink handling with the following features:
 
-- Hierarchical grouping for large collections
-- Undo functionality
-- Enhanced heuristics for text-likeness detection (e.g., natural language detection)
-- Configurable grouping behavior (e.g., similarity banding)
+1. **Base Directory Containment**:
+   - Optional base directory restriction via `--base-dir`
+   - Prevents symlinks from accessing files outside the allowed directory tree
+   - Handles both absolute and relative symlinks securely
+   - Validates paths using strict resolution checks
+
+1. **Cycle Detection**:
+   - Prevents infinite loops from circular symlinks
+   - Tracks visited paths during resolution
+   - Handles both direct and indirect cycles gracefully
+   - Clears visited path cache between resolutions
+
+1. **Depth Control**:
+   - Configurable maximum symlink depth (default: 10)
+   - Prevents resource exhaustion from deep symlink chains
+   - Customizable via `--max-symlink-depth` option
+   - Returns None for chains exceeding maximum depth
+
+### Security Considerations
+
+- Atomic symlink resolution to prevent TOCTOU vulnerabilities
+- Strict path validation for base directory containment
+- Graceful handling of broken symlinks and permission errors
+- Comprehensive error reporting and logging
+- Zero-byte file detection and handling
+- Safe handling of relative path traversal attempts
+
+### Implementation Details
+
+The symlink handler:
+
+- Validates existence before resolution
+- Converts relative symlinks to absolute paths
+- Performs base directory containment checks
+- Maintains state for cycle detection
+- Provides detailed error information
+- Supports both interactive and non-interactive modes
+
+For untrusted environments, it's recommended to:
+
+- Set a lower `--max-symlink-depth` value
+- Enable base directory containment with `--base-dir`
+- Use `--no-follow-symlinks` if symlink following is not required
 
 ## Technical Details
 
@@ -265,6 +393,18 @@ The following parameters can be customized:
 - `--shingle-size`: Size of text shingles (default: 5)
 - `--threshold`: Minimum similarity threshold (default: 0.8)
 - `--min-printable`: Minimum ratio of printable characters (default: 0.8)
+
+## Requirements
+
+- Python 3.10 or higher (tested up to 3.13)
+
+## Security
+
+We take security seriously. Please see our [Security Policy](SECURITY.md) for:
+
+- How to report vulnerabilities
+- Our response process
+- Supported versions
 
 ## Development
 

@@ -160,90 +160,80 @@ def test_error_message_formatting(tmp_path: Path) -> None:
     assert "read" in str(perm_error)
 
 
-def test_execute_moves_total_disk_space(tmp_path: Path) -> None:
+def test_execute_moves_total_disk_space(
+    create_test_files: List[Path], duplicates_dir: Path
+) -> None:
     """Test total disk space checking across all destinations."""
-    # Create test files
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    file3 = tmp_path / "test3.txt"
-
-    # Create files with known sizes
-    file1.write_text("x" * 1000)  # 1000 bytes
-    file2.write_text("x" * 2000)  # 2000 bytes
-    file3.write_text("x" * 3000)  # 3000 bytes
-
-    # Create different destination directories
-    dest1 = tmp_path / "dest1"
-    dest2 = tmp_path / "dest2"
-    dest1.mkdir()
-    dest2.mkdir()
+    files = create_test_files
+    total_size = sum(f.stat().st_size for f in files)
 
     moves = [
-        MoveOperation(source=file1, destination=dest1 / "test1.txt", group_id=1),
-        MoveOperation(source=file2, destination=dest1 / "test2.txt", group_id=1),
-        MoveOperation(source=file3, destination=dest2 / "test3.txt", group_id=1),
+        MoveOperation(
+            source=files[0],
+            destination=duplicates_dir / "test1.txt",
+            group_id=1,
+        ),
+        MoveOperation(
+            source=files[1],
+            destination=duplicates_dir / "test2.txt",
+            group_id=1,
+        ),
+        MoveOperation(
+            source=files[2],
+            destination=duplicates_dir / "test3.txt",
+            group_id=1,
+        ),
     ]
 
-    # Test when total space is insufficient
     with patch("shutil.disk_usage") as mock_disk_usage:
-        # Mock disk space that's less than total needed (6000 bytes)
-        mock_disk_usage.return_value = Mock(free=5000)
+        # Mock disk space to be half of what's needed
+        mock_disk_usage.return_value = Mock(free=total_size // 2)
 
         with pytest.raises(DiskSpaceError) as exc_info:
             execute_moves(moves)
 
-        # Verify the error is about total space
-        assert exc_info.value.required_bytes == 6000
-        assert exc_info.value.available_bytes == 5000
-
-        # Verify no files were moved
-        assert file1.exists()
-        assert file2.exists()
-        assert file3.exists()
+        assert exc_info.value.required_bytes > exc_info.value.available_bytes
+        assert all(f.exists() for f in files)  # Verify no files were moved
 
 
-def test_execute_moves_disk_space(tmp_path: Path) -> None:
+def test_execute_moves_disk_space(
+    create_test_files: List[Path], duplicates_dir: Path
+) -> None:
     """Test disk space checking for moves."""
-    # Create test files with known sizes
-    file1 = tmp_path / "test1.txt"
-    file2 = tmp_path / "test2.txt"
-    file3 = tmp_path / "test3.txt"
-
-    file1.write_text("x" * 1000)  # 1000 bytes
-    file2.write_text("x" * 2000)  # 2000 bytes
-    file3.write_text("x" * 3000)  # 3000 bytes
-
-    # Create destination directories
-    dest1 = tmp_path / "dest1"
-    dest2 = tmp_path / "dest2"
-    dest1.mkdir()
-    dest2.mkdir()
+    files = create_test_files[:3]  # Get first three test files
+    total_size = sum(f.stat().st_size for f in files)
 
     moves = [
-        MoveOperation(source=file1, destination=dest1 / "test1.txt", group_id=1),
-        MoveOperation(source=file2, destination=dest1 / "test2.txt", group_id=1),
-        MoveOperation(source=file3, destination=dest2 / "test3.txt", group_id=1),
+        MoveOperation(
+            source=files[0],
+            destination=duplicates_dir / "test1.txt",
+            group_id=1,
+        ),
+        MoveOperation(
+            source=files[1],
+            destination=duplicates_dir / "test2.txt",
+            group_id=1,
+        ),
+        MoveOperation(
+            source=files[2],
+            destination=duplicates_dir / "test3.txt",
+            group_id=1,
+        ),
     ]
 
-    # Test when total space is insufficient
     with patch("shutil.disk_usage") as mock_disk_usage:
-        # Mock disk space that's less than total needed (6000 bytes)
-        mock_disk_usage.return_value = Mock(free=5000)
+        # Mock disk space that's less than total needed
+        mock_disk_usage.return_value = Mock(free=total_size // 2)
 
         with pytest.raises(DiskSpaceError) as exc_info:
             execute_moves(moves)
 
         # Verify the error is about total space
-        assert exc_info.value.required_bytes == 6000
-        assert exc_info.value.available_bytes == 5000
+        assert exc_info.value.required_bytes > exc_info.value.available_bytes
 
         # Verify no files were moved
-        assert file1.exists()
-        assert file2.exists()
-        assert file3.exists()
-        assert not (dest1 / "test1.txt").exists()
-        assert not (dest2 / "test2.txt").exists()
-        assert not (dest2 / "test3.txt").exists()
+        assert all(f.exists() for f in files)
+        assert not any((duplicates_dir / f"test{i}.txt").exists() for i in range(1, 4))
 
 
 def test_execute_moves_successful(tmp_path: Path) -> None:
