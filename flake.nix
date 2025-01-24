@@ -27,6 +27,7 @@
 
             # System dependencies
             git
+            stdenv.cc.cc.lib
           ];
 
           shellHook = ''
@@ -35,6 +36,9 @@
               python -m venv .venv
             fi
             source .venv/bin/activate
+
+            # Set LD_LIBRARY_PATH to include libstdc++
+            export LD_LIBRARY_PATH=${pkgs.stdenv.cc.cc.lib}/lib:$LD_LIBRARY_PATH
 
             # Install project dependencies
             pip install -e ".[dev]"
