@@ -92,31 +92,59 @@ The tool operates in two primary modes:
      ┏━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
      ┃ # ┃ File                                  ┃         Size ┃         Modified ┃
      ┡━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
-     │ 1 │ ../numpy-2.2.1.dist-info/LICENSE.txt  │ 47,755 bytes │ 2025-01-13 13:57 │
-     │ 2 │ ../scipy-1.15.1.dist-info/LICENSE.txt │ 46,845 bytes │ 2025-01-13 13:57 │
+     │ 1 │ path/to/file1.txt                     │ 47,755 bytes │ 2025-01-13 13:57 │
+     │ 2 │ path/to/file2.txt                     │ 46,845 bytes │ 2025-01-13 13:57 │
      └───┴───────────────────────────────────────┴──────────────┴──────────────────┘
      ```
 
    - For groups with 2 files: Shows "~XX.XX% similar"
    - For groups with 3+ files: Shows "~XX.XX% avg. similarity"
 
+1. **Default Keeper Selection**:
+   - A default keeper file is automatically selected based on retention criteria
+   - Users can choose to accept or change the default keeper when performing actions
+   - When prompted "Do you want to select a different keeper? [y/n]:", users can:
+     - Accept the default (n)
+     - Choose a different file by number (y)
+
 1. **Available Actions**:
    - **[n] Next group**: Skip to the next group without making changes
-   - **[d] Delete duplicates**: Select files to delete (with space-separated numbers,
-     'all', or 'none')
-   - **[m] Move duplicates**: Select files to move to the holding directory
+   - **[d] Delete duplicates**: Delete selected files, keeping the chosen keeper
+   - **[m] Move duplicates**: Move selected files to a holding directory
    - **[p] Preview**: Display file contents with configurable limits:
-     - Maximum characters (default: 100)
-     - Maximum lines (default: 3)
-     - Truncation marker ("...")
-   - **[s] Show similarities**: Display pairwise similarity scores between files
-   - **[q] Quit**: Exit the program
 
-1. **Group Management**:
-   - Groups are presented in order of highest similarity first
-   - Each group remains active until explicitly handled (keep, delete, or move)
-   - After any file operation, groups are automatically recalculated
-   - Detailed information can be viewed multiple times while working with a group
+     ```console
+     ╭─── path/to/file1.txt ────╮
+     │ First line of content    │
+     │ Second line of content   │
+     │ ...                      │
+     ╰── Size: 47,755 bytes ────╯
+     ```
+
+   - **[s] Show similarities**: Display pairwise similarity scores:
+
+     ```console
+     ╭─── Pairwise Similarities ────╮
+     │ File 1    File 2    Similar │
+     │ file1.txt file2.txt  97.6%  │
+     │ file1.txt file3.txt  89.0%  │
+     ╰────────────────────────────╯
+     ```
+
+   - **[q] Quit**: Exit the program
+   - **[h] Help**: Show available commands
+
+1. **Dry Run Mode**:
+   - When using `--dry-run`, actions are simulated:
+     - Shows "Dry run: Would move these files:" or similar messages
+     - No actual file operations are performed
+   - Useful for previewing what actions would be taken
+
+1. **Pending Operations**:
+   - Move operations are queued until explicitly confirmed
+   - Before exiting or after processing groups, prompts:
+     "Execute pending moves? [y/n]:"
+   - Reports results: "Successfully moved X files"
 
 ## User Flow
 
@@ -234,6 +262,8 @@ ndetect --mode non-interactive /path/to/files
 - `--threshold [float]`: Minimum similarity threshold (default: 0.85)
 - `--holding-dir [path]`: Directory for moved duplicates (default: ./holding)
 - `--dry-run`: Preview actions without making changes
+- `--verbose`: Enable verbose logging
+- `--log-file [path]`: Path to log file (if not specified, only logs to console)
 
 ### Examples
 
@@ -241,14 +271,17 @@ ndetect --mode non-interactive /path/to/files
 # Find duplicates with higher similarity threshold
 ndetect --threshold 0.95 /path/to/files
 
-# Move duplicates to custom directory
-ndetect --holding-dir /tmp/duplicates /path/to/files
+# Move duplicates to custom directory with logging
+ndetect --holding-dir /tmp/duplicates --log-file ndetect.log /path/to/files
 
-# Non-interactive mode with logging
+# Non-interactive mode with custom retention strategy
 ndetect --mode non-interactive \
-        --log /var/log/ndetect.log \
+        --retention newest \
         --holding-dir /archive \
         /path/to/files
+
+# Preview operations without making changes
+ndetect --dry-run /path/to/files
 ```
 
 ### Text Processing Options
@@ -257,6 +290,8 @@ ndetect --mode non-interactive \
 - `--num-perm [int]`: Number of MinHash permutations (default: 128)
 - `--shingle-size [int]`: Size of text shingles for comparison (default: 5)
 - `--include-empty`: Include empty (zero-byte) files in analysis (default: skip empty files)
+- `--max-workers [int]`: Maximum number of worker processes for parallel scanning
+  (default: CPU count)
 
 ### File Selection Options
 
@@ -313,22 +348,6 @@ For untrusted environments, it's recommended to:
 - Enable base directory containment with `--base-dir`
 - Use `--no-follow-symlinks` if symlink following is not required
 
-## Future Considerations (Post-MVP)
-
-### Error Handling & Operations
-
-- Enhanced error recovery mechanisms
-- Operation rollback capabilities
-- Advanced report generation
-- Detailed error logging with analytics
-
-### Feature Enhancements
-
-- Hierarchical grouping for large collections
-- Undo functionality
-- Enhanced heuristics for text-likeness detection (e.g., natural language detection)
-- Configurable grouping behavior (e.g., similarity banding)
-
 ## Technical Details
 
 ### Text Processing
@@ -383,8 +402,3 @@ The project uses several code quality tools:
 
 All of these tools are automatically configured in the development environment when
 using `nix develop`.
-
-### Performance Options
-
-- `--max-workers [int]`: Maximum number of worker processes for parallel scanning
-  (default: CPU count)
